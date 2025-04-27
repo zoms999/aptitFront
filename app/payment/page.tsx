@@ -1,132 +1,483 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+import { loadPaymentWidget, ANONYMOUS } from '@tosspayments/payment-widget-sdk';
+import { nanoid } from 'nanoid';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { toast } from 'react-toastify';
+import { useSession } from 'next-auth/react';
+
+// 로딩 컴포넌트 직접 구현
+const Loading = () => (
+  <div className="flex flex-col items-center justify-center py-8">
+    <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mb-4"></div>
+    <p className="text-gray-600">로딩 중...</p>
+  </div>
+);
+
+// 토스페이먼츠 클라이언트 키
+const clientKey = 'test_gck_yZqmkKeP8gWKkB7n6KZx8bQRxB9l';
+
+// 타입 정의
+interface PaymentMethodsOptions {
+  value: number;
+}
+
+interface WidgetOptions {
+  variantKey: string;
+}
+
+interface SelectedPaymentMethod {
+  method: string;
+  [key: string]: unknown;
+}
+
+interface PaymentRequestOptions {
+  orderId: string;
+  orderName: string;
+  customerName: string;
+  customerEmail: string;
+  successUrl: string;
+  failUrl: string;
+}
+
+interface PaymentWidgetInstance {
+  renderPaymentMethods: (
+    selector: string, 
+    options: PaymentMethodsOptions, 
+    widgetOptions?: WidgetOptions
+  ) => PaymentMethodsWidgetInstance;
+  renderAgreement: (selector: string, options?: WidgetOptions) => void;
+  requestPayment: (paymentOptions: PaymentRequestOptions) => Promise<unknown>;
+}
+
+interface PaymentMethodsWidgetInstance {
+  getSelectedPaymentMethod: () => Promise<SelectedPaymentMethod>;
+}
+
+// 상품 타입 정의
+interface Product {
+  pd_num: number;
+  pd_price: number;
+  pd_dc: number;
+  pd_name: string;
+  pd_type: string;
+  pd_quota: string;
+  pd_virtual_expire_at: number;
+  pd_use: string;
+  pd_kind: string;
+}
 
 export default function PaymentPage() {
+  const { data: session, status } = useSession();
+  const [paymentWidget, setPaymentWidget] = useState<PaymentWidgetInstance | null>(null);
+  const [paymentMethodsWidget, setPaymentMethodsWidget] = useState<PaymentMethodsWidgetInstance | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [orderId, setOrderId] = useState('');
+  const [orderName, setOrderName] = useState('');
+  const [amount, setAmount] = useState(0);
+  const [acGid, setAcGid] = useState('');
+  const [productId, setProductId] = useState('');
+  const [productType, setProductType] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('');
+  const [products, setProducts] = useState<Product[]>([]);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+
   const router = useRouter();
   const searchParams = useSearchParams();
-  const acGid = searchParams.get('acGid');
-  const [paymentInfo] = useState({
-    program: '기본 검사 프로그램',
-    price: 0
-  });
-  const [loading, setLoading] = useState(true);
-  const [error] = useState('');
 
+  // 인증 상태 확인
   useEffect(() => {
-    // acGid가 없으면 회원가입 페이지로 리다이렉트
-    if (!acGid) {
-      router.push('/signup');
+    if (status === 'unauthenticated') {
+      toast.error('로그인이 필요한 서비스입니다');
+      router.push('/login?callbackUrl=/payment');
+    }
+  }, [status, router]);
+
+  // 상품 목록 가져오기
+  useEffect(() => {
+    if (status !== 'authenticated') return;
+    
+    const fetchProducts = async () => {
+      try {
+        const response = await fetch('/api/products', {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        
+        if (!response.ok) {
+          throw new Error('상품 목록을 가져오는데 실패했습니다');
+        }
+        
+        const data = await response.json();
+        setProducts(data);
+        
+        // URL 파라미터로 전달된 cr_seq 확인
+        const crSeq = searchParams.get('cr_seq');
+        if (crSeq) {
+          fetchPaymentInfo(crSeq);
+        } else {
+          setLoading(false);
+        }
+      } catch (error) {
+        console.error('상품 목록 조회 오류:', error);
+        toast.error('상품 목록을 불러오는데 실패했습니다');
+        setLoading(false);
+      }
+    };
+    
+    fetchProducts();
+  }, [status, searchParams]);
+
+  // 상품 선택 처리
+  const handleSelectProduct = (product: Product) => {
+    setSelectedProduct(product);
+    setOrderId(`order_${nanoid()}`);
+    setOrderName(product.pd_name);
+    setAmount(product.pd_price);
+    setProductId(product.pd_num.toString());
+    setProductType(product.pd_kind);
+    
+    // 결제 위젯 로드
+    if (!paymentWidget) {
+      loadPaymentWidgetAsync();
+    }
+  };
+
+  // URL 파라미터에서 정보 읽기
+  useEffect(() => {
+    if (status !== 'authenticated') return;
+    
+    try {
+      if (session?.user && 'id' in session.user) {
+        setAcGid(session.user.id as string);
+      } else {
+        toast.error('사용자 정보를 찾을 수 없습니다');
+        router.push('/');
+        return;
+      }
+    } catch (error) {
+      console.error('페이지 초기화 오류:', error);
+      toast.error('결제 페이지 초기화 중 오류가 발생했습니다');
+      router.push('/');
+    }
+  }, [searchParams, router, session, status]);
+
+  // 결제 정보 가져오기
+  const fetchPaymentInfo = async (crSeq: string) => {
+    try {
+      const response = await fetch(`/api/payment/info?cr_seq=${crSeq}`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      
+      if (!response.ok) {
+        throw new Error('결제 정보를 가져오는데 실패했습니다');
+      }
+      
+      const data = await response.json();
+      
+      setOrderId(`order_${nanoid()}`);
+      setOrderName(data.orderName || '검사 프로그램');
+      setAmount(data.amount || 30000);
+      setProductId(data.productId || crSeq);
+      setProductType(data.productType || 'basic');
+      
+      // 제품 정보를 이용해 selectedProduct 찾기
+      const matchedProduct = products.find(p => 
+        p.pd_num.toString() === crSeq || 
+        p.pd_kind === data.productType
+      );
+      
+      if (matchedProduct) {
+        setSelectedProduct(matchedProduct);
+      }
+      
+      // 결제 위젯 로드
+      loadPaymentWidgetAsync();
+    } catch (error) {
+      console.error('결제 정보 조회 오류:', error);
+      toast.error('결제 정보를 가져오는데 실패했습니다');
+      // 오류 시에도 기본 상품 목록은 표시
+      setLoading(false);
+    }
+  };
+
+  // 결제 위젯 로드
+  const loadPaymentWidgetAsync = async () => {
+    try {
+      const loadedWidget = await loadPaymentWidget(clientKey, ANONYMOUS);
+      setPaymentWidget(loadedWidget as unknown as PaymentWidgetInstance);
+    } catch (error) {
+      console.error('결제 위젯 로드 실패:', error);
+      toast.error('결제 시스템을 불러오는데 실패했습니다. 페이지를 새로고침 해보세요.');
+      setLoading(false);
+    }
+  };
+
+  // 결제 위젯 초기화
+  useEffect(() => {
+    if (!paymentWidget || !amount) return;
+
+    // 위젯 렌더링 타이밍 조정을 위한 짧은 지연
+    const timer = setTimeout(() => {
+      try {
+        // 결제 수단 DOM 요소 존재 확인
+        const paymentMethodsEl = document.getElementById('payment-methods');
+        const agreementEl = document.getElementById('agreement');
+        
+        if (!paymentMethodsEl || !agreementEl) {
+          console.error('결제 위젯을 위한 DOM 요소를 찾을 수 없습니다');
+          setLoading(false);
+          return;
+        }
+        
+        const paymentMethodsWidgetInstance = paymentWidget.renderPaymentMethods(
+          '#payment-methods',
+          { value: amount },
+          { variantKey: 'DEFAULT' }
+        );
+
+        paymentWidget.renderAgreement('#agreement', { variantKey: 'AGREEMENT' });
+
+        setPaymentMethodsWidget(paymentMethodsWidgetInstance);
+      } catch (error) {
+        console.error('결제 위젯 렌더링 오류:', error);
+        toast.error('결제 화면을 불러오는데 실패했습니다');
+      } finally {
+        setLoading(false);
+      }
+    }, 100); // 100ms 지연
+
+    return () => clearTimeout(timer);
+  }, [paymentWidget, amount]);
+
+  // 결제 준비 API 호출
+  const preparePayment = async () => {
+    try {
+      const response = await fetch('/api/payment/ready', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderId,
+          amount,
+          orderName,
+          acGid,
+          productId,
+          productType,
+          paymentMethod
+        }),
+      });
+
+      const data = await response.json();
+      
+      if (!data.success) {
+        toast.error(data.message || '결제 준비 중 오류가 발생했습니다');
+        return false;
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('결제 준비 API 호출 오류:', error);
+      toast.error('결제 준비 중 오류가 발생했습니다');
+      return false;
+    }
+  };
+
+  // 결제 처리
+  const handlePayment = async () => {
+    if (!paymentWidget || !paymentMethodsWidget) {
+      toast.error('결제 시스템이 준비되지 않았습니다');
+      return;
+    }
+    
+    if (isProcessing) {
+      toast.info('결제 요청 처리 중입니다. 잠시만 기다려주세요.');
       return;
     }
 
-    // 실제 구현에서는 여기서 회원 정보 및 프로그램 정보를 불러오는 API 호출
-    setLoading(false);
-  }, [acGid, router]);
+    try {
+      setIsProcessing(true);
+      
+      // 결제 수단 선택 확인
+      let selectedMethod;
+      try {
+        selectedMethod = await paymentMethodsWidget.getSelectedPaymentMethod();
+        if (!selectedMethod) {
+          toast.error('결제 수단을 선택해주세요');
+          setIsProcessing(false);
+          return;
+        }
+      } catch (methodError) {
+        console.error('결제 수단 확인 오류:', methodError);
+        toast.error('결제 수단을 확인할 수 없습니다. 결제 수단을 선택해주세요.');
+        setIsProcessing(false);
+        return;
+      }
+      
+      // 결제 수단 저장
+      setPaymentMethod(selectedMethod.method);
+      
+      // 결제 정보 유효성 검증
+      if (!orderId || !amount || !orderName || !acGid) {
+        toast.error('결제 정보가 올바르지 않습니다. 페이지를 새로고침 해주세요.');
+        setIsProcessing(false);
+        return;
+      }
+      
+      // 결제 준비 API 호출
+      try {
+        const prepared = await preparePayment();
+        if (!prepared) {
+          setIsProcessing(false);
+          return;
+        }
+      } catch (prepareError) {
+        console.error('결제 준비 API 오류:', prepareError);
+        toast.error('결제 준비 과정에서 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
+        setIsProcessing(false);
+        return;
+      }
 
-  const handlePayment = () => {
-    // 결제 처리 로직
-    alert('결제가 완료되었습니다. 검사로 이동합니다.');
-    router.push('/test');
+      // 결제 요청
+      try {
+        await paymentWidget.requestPayment({
+          orderId,
+          orderName,
+          customerName: acGid,
+          customerEmail: '',
+          successUrl: `${window.location.origin}/payment/success`,
+          failUrl: `${window.location.origin}/payment/fail`,
+        });
+      } catch (paymentError: unknown) {
+        console.error('결제 요청 오류:', paymentError);
+        
+        // 토스페이먼츠 에러 타입 확인
+        if (paymentError && typeof paymentError === 'object' && 'code' in paymentError) {
+          // 사용자 취소인 경우 (토스페이먼츠 에러 코드)
+          if (paymentError.code === 'USER_CANCEL') {
+            toast.info('결제가 취소되었습니다.');
+            return;
+          }
+        }
+        
+        // 일반적인 에러 메시지 표시
+        const errorMessage = 
+          paymentError && typeof paymentError === 'object' && 'message' in paymentError
+            ? String(paymentError.message)
+            : '알 수 없는 오류';
+            
+        toast.error(`결제 요청 중 오류가 발생했습니다: ${errorMessage}`);
+      }
+    } catch (error) {
+      console.error('결제 처리 중 예상치 못한 오류:', error);
+      toast.error('결제 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="flex justify-center items-center min-h-screen">
-        <div className="bg-red-100 text-red-700 p-4 rounded-md">
-          <p>{error}</p>
-          <button 
-            className="mt-4 bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700"
-            onClick={() => router.push('/signup')}
-          >
-            회원가입으로 돌아가기
-          </button>
-        </div>
-      </div>
-    );
-  }
+  // 페이지 새로고침
+  const handleRefresh = () => {
+    window.location.reload();
+  };
 
   return (
-    <div className="max-w-3xl mx-auto py-10 px-4 sm:px-6 lg:py-16 lg:px-8">
-      <h1 className="text-3xl font-extrabold text-gray-900 sm:text-4xl">
-        결제
-      </h1>
-      <p className="mt-4 text-lg text-gray-600">
-        결제를 진행하여 주십시오.
-      </p>
-      <p className="mt-2 text-gray-600">
-        검사자님께서는 아래 선택하신 프로그램으로 진행됨을 알려드립니다.
-      </p>
-
-      <div className="mt-8 bg-white shadow overflow-hidden rounded-lg">
-        <div className="px-4 py-5 sm:px-6 bg-gray-50">
-          <h3 className="text-lg leading-6 font-medium text-gray-900">
-            결제 정보
-          </h3>
-        </div>
-        <div className="border-t border-gray-200">
-          <dl>
-            <div className="bg-white px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-              <dt className="text-sm font-medium text-gray-500">
-                검사 프로그램
-              </dt>
-              <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
-                {paymentInfo.program}
-              </dd>
+    <div className="container mx-auto p-4 max-w-lg">
+      <h1 className="text-2xl font-bold mb-6 text-center">결제하기</h1>
+      
+      {status === 'loading' || loading ? (
+        <Loading />
+      ) : (
+        <>
+          {/* 상품 선택 영역 */}
+          {products.length > 0 && !selectedProduct && (
+            <div className="bg-white p-6 rounded-lg shadow-md mb-6">
+              <h2 className="text-lg font-semibold mb-4">상품 선택</h2>
+              <div className="space-y-4">
+                {products.map((product) => (
+                  <div 
+                    key={product.pd_num}
+                    className="border rounded-lg p-4 cursor-pointer hover:border-blue-500 hover:bg-blue-50 transition"
+                    onClick={() => handleSelectProduct(product)}
+                  >
+                    <div className="flex justify-between mb-2">
+                      <span className="font-medium text-lg">{product.pd_name}</span>
+                      <span className="font-bold text-blue-600">{product.pd_price.toLocaleString()}원</span>
+                    </div>
+                    <div className="text-gray-600 text-sm">
+                      <p>유효기간: {product.pd_virtual_expire_at}일</p>
+                      <p>타입: {product.pd_kind}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="bg-gray-50 px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-              <dt className="text-sm font-medium text-gray-500">
-                가격
-              </dt>
-              <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
-                {paymentInfo.price.toLocaleString()} 원
-              </dd>
+          )}
+
+          {/* 결제 정보 영역 */}
+          {selectedProduct && (
+            <div className="bg-white p-6 rounded-lg shadow-md mb-6">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-lg font-semibold">결제 정보</h2>
+                <button 
+                  onClick={() => setSelectedProduct(null)}
+                  className="text-sm text-blue-600 hover:text-blue-800"
+                >
+                  상품 변경
+                </button>
+              </div>
+              <div className="flex justify-between mb-4">
+                <span className="font-semibold">주문명:</span>
+                <span>{orderName}</span>
+              </div>
+              <div className="flex justify-between mb-4">
+                <span className="font-semibold">결제금액:</span>
+                <span>{amount.toLocaleString()}원</span>
+              </div>
+              <div className="flex justify-between mb-4">
+                <span className="font-semibold">주문번호:</span>
+                <span>{orderId}</span>
+              </div>
             </div>
-          </dl>
-        </div>
-      </div>
+          )}
 
-      <div className="mt-8 bg-white shadow overflow-hidden rounded-lg">
-        <div className="px-4 py-5 sm:px-6 bg-gray-50">
-          <h3 className="text-lg leading-6 font-medium text-gray-900">
-            주의사항 [필독]
-          </h3>
-        </div>
-        <div className="border-t border-gray-200 px-4 py-5 sm:p-6">
-          <ul className="list-disc pl-5 space-y-2 text-sm text-gray-700">
-            <li>
-              결제 완료 후 선택하신 프로그램에 해당하는 검사가 곧바로 진행됩니다.
-            </li>
-            <li>
-              곧바로 검사를 진행하지 못하실 경우, 결제 후 7일 이내에 실시 하셔야 하며, 7일이 경과되면 소멸됩니다.
-            </li>
-            <li>
-              결제 후 바로 검사가 진행되므로, 결제가 완료된 뒤에는 취소 및 환불이 불가합니다.
-            </li>
-            <li>
-              결제 시 본 프로그램의 특허권, 저작권, 상표권 등의 소유권을 가진 커리어컴퍼니로 결과가 통보됩니다.
-            </li>
-          </ul>
-        </div>
-      </div>
+          {/* 결제 위젯 영역 */}
+          {selectedProduct && paymentWidget ? (
+            <div className="bg-white p-6 rounded-lg shadow-md mb-6">
+              <h2 className="text-lg font-semibold mb-4">결제 수단 선택</h2>
+              <div id="payment-methods" className="mb-4"></div>
+              <div id="agreement" className="mb-4"></div>
+            </div>
+          ) : selectedProduct && !paymentWidget ? (
+            <div className="bg-white p-6 rounded-lg shadow-md mb-6 text-center">
+              <p className="text-gray-700 mb-4">결제 시스템을 불러오는데 실패했습니다.</p>
+              <button 
+                onClick={handleRefresh}
+                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+              >
+                새로고침
+              </button>
+            </div>
+          ) : null}
 
-      <div className="mt-8 flex justify-center">
-        <button
-          onClick={handlePayment}
-          className="bg-indigo-600 text-white py-3 px-6 rounded-md shadow-sm text-base font-medium hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-        >
-          결제하기
-        </button>
-      </div>
+          {/* 결제 버튼 */}
+          {selectedProduct && (
+            <button
+              onClick={handlePayment}
+              disabled={!paymentMethodsWidget}
+              className={`w-full py-3 rounded-lg font-semibold transition duration-200 ${
+                !paymentMethodsWidget 
+                  ? 'bg-gray-400 cursor-not-allowed text-gray-100' 
+                  : 'bg-blue-600 hover:bg-blue-700 text-white'
+              }`}
+            >
+              결제하기
+            </button>
+          )}
+        </>
+      )}
     </div>
   );
 } 

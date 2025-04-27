@@ -1,61 +1,228 @@
-import { getServerSession } from "next-auth/next";
-import { redirect } from "next/navigation";
-import Link from "next/link";
+"use client";
 
-export default async function Dashboard() {
-  const session = await getServerSession();
+import { useEffect, useState } from 'react';
+import { useSession } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
 
-  if (!session?.user) {
-    redirect("/");
+interface AccountStatus {
+  cr_pay: string;
+  pd_kind: string;
+  expire: string;
+  state: string;
+}
+
+interface Test {
+  num: number;
+  cr_seq: number;
+  cr_pay: string;
+  pd_name: string;
+  anp_seq: number;
+  startdate: string;
+  enddate: string;
+  done: string;
+  rview: string;
+  expiredate: string;
+}
+
+interface DashboardData {
+  accountStatus: AccountStatus;
+  tests: Test[];
+  completedTests: number;
+}
+
+export default function Dashboard() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+  const [loading, setLoading] = useState(true);
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    // 인증 상태 확인
+    if (status === 'unauthenticated') {
+      router.push('/login');
+      return;
+    }
+
+    if (status === 'authenticated') {
+      fetchDashboardData();
+    }
+  }, [status, router]);
+
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true);
+      console.log('Fetching dashboard data...');
+      
+      const response = await fetch('/api/dashboard');
+      console.log('API response status:', response.status);
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('API error:', errorData);
+        throw new Error(errorData.error || '데이터를 가져오는데 실패했습니다');
+      }
+      
+      const data = await response.json();
+      console.log('Dashboard data received:', data);
+      setDashboardData(data);
+    } catch (err) {
+      console.error('Dashboard fetch error:', err);
+      setError(err instanceof Error ? err.message : '오류가 발생했습니다');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 결제 페이지로 이동
+  const handlePayment = () => {
+    router.push('/payment');
+  };
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen p-4">
+        <div className="w-16 h-16 border-t-4 border-blue-500 border-solid rounded-full animate-spin"></div>
+        <p className="mt-4 text-lg">데이터를 불러오는 중입니다...</p>
+      </div>
+    );
   }
 
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen p-4">
+        <div className="w-full max-w-3xl p-6 bg-white rounded-lg shadow-md">
+          <h1 className="mb-4 text-2xl font-bold text-red-500">오류 발생</h1>
+          <p className="text-gray-700">{error}</p>
+          <button 
+            onClick={fetchDashboardData}
+            className="px-4 py-2 mt-4 text-white bg-blue-500 rounded hover:bg-blue-600"
+          >
+            다시 시도
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!dashboardData) {
+    return null;
+  }
+
+  const { accountStatus, tests, completedTests } = dashboardData;
+  
+  // 계정 상태에 따른 표시 정보
+  const isPaid = accountStatus.cr_pay === 'Y';
+  const isExpired = accountStatus.expire === 'N';
+  const expireDate = tests.length > 0 ? tests[0].expiredate : '만료일 없음';
+
   return (
-    <div className="min-h-screen py-12 px-4 sm:px-6 lg:px-8 bg-background">
-      <div className="max-w-4xl mx-auto">
-        <div className="text-center mb-10">
-          <h1 className="text-3xl font-bold mb-4">대시보드</h1>
-          <p className="text-muted-foreground">환영합니다! 성공적으로 로그인되었습니다.</p>
+    <div className="flex flex-col min-h-screen p-4 bg-gray-50">
+      <div className="w-full max-w-4xl mx-auto">
+        {/* 환영 메시지 및 헤더 */}
+        <div className="p-6 mb-6 bg-white rounded-lg shadow-md">
+          <h1 className="mb-2 text-2xl font-bold text-gray-800">
+            {session?.user?.name || '사용자'}님, 환영합니다!
+          </h1>
+          <div className="flex flex-wrap items-center justify-between">
+            <p className="text-gray-600">
+              대시보드에서 검사 결과와 계정 정보를 확인할 수 있습니다.
+            </p>
+            <button
+              onClick={handlePayment}
+              className="px-4 py-2 mt-4 text-white bg-blue-500 rounded-md hover:bg-blue-600 sm:mt-0"
+            >
+              결제하기
+            </button>
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <div className="p-6 bg-card rounded-lg shadow-md border">
-            <h2 className="text-xl font-semibold mb-4">적성 검사 시작하기</h2>
-            <p className="text-muted-foreground mb-4">
-              적성 검사를 통해 자신의 강점과 적합한 직업을 알아보세요.
-            </p>
-            <Link
-              href="/aptitude-test"
-              className="block w-full py-2 px-4 text-center rounded-md bg-primary text-primary-foreground font-medium hover:bg-primary/90"
-            >
-              검사 시작
-            </Link>
+        {/* 내 정보 카드 */}
+        <div className="p-6 mb-6 bg-white rounded-lg shadow-md">
+          <h2 className="mb-4 text-xl font-semibold text-gray-800">내 정보</h2>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <div className="p-4 border rounded-md">
+              <h3 className="mb-1 text-sm font-medium text-gray-500">계정 상태</h3>
+              <p className="text-lg font-semibold">{isPaid ? '결제 완료' : '미결제'}</p>
+            </div>
+            <div className="p-4 border rounded-md">
+              <h3 className="mb-1 text-sm font-medium text-gray-500">결제 상태</h3>
+              <p className={`text-lg font-semibold ${isPaid ? 'text-green-500' : 'text-red-500'}`}>
+                {isPaid ? '결제됨' : '미결제'}
+              </p>
+            </div>
+            <div className="p-4 border rounded-md">
+              <h3 className="mb-1 text-sm font-medium text-gray-500">만료일</h3>
+              <p className={`text-lg font-semibold ${isExpired ? 'text-red-500' : 'text-green-500'}`}>
+                {expireDate}
+              </p>
+            </div>
+            <div className="p-4 border rounded-md">
+              <h3 className="mb-1 text-sm font-medium text-gray-500">완료된 검사</h3>
+              <p className="text-lg font-semibold">{completedTests}개</p>
+            </div>
           </div>
+        </div>
 
-          <div className="p-6 bg-card rounded-lg shadow-md border">
-            <h2 className="text-xl font-semibold mb-4">이전 검사 결과</h2>
-            <p className="text-muted-foreground mb-4">
-              이전에 진행했던 적성 검사 결과를 확인하세요.
-            </p>
-            <Link
-              href="/results"
-              className="block w-full py-2 px-4 text-center rounded-md bg-secondary text-secondary-foreground font-medium hover:bg-secondary/90"
-            >
-              결과 보기
-            </Link>
-          </div>
-
-          <div className="p-6 bg-card rounded-lg shadow-md border">
-            <h2 className="text-xl font-semibold mb-4">내 정보</h2>
-            <p className="text-muted-foreground mb-4">
-              개인 정보 및 계정 설정을 관리합니다.
-            </p>
-            <Link
-              href="/profile"
-              className="block w-full py-2 px-4 text-center rounded-md bg-accent text-accent-foreground font-medium hover:bg-accent/90"
-            >
-              프로필 관리
-            </Link>
-          </div>
+        {/* 내 검사 목록 */}
+        <div className="p-6 bg-white rounded-lg shadow-md">
+          <h2 className="mb-4 text-xl font-semibold text-gray-800">내 검사 목록</h2>
+          
+          {tests.length === 0 ? (
+            <div className="p-4 text-center text-gray-500 border rounded-md">
+              검사 내역이 없습니다.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full mb-4 text-sm text-left text-gray-700">
+                <thead className="text-xs text-gray-700 uppercase bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3">번호</th>
+                    <th className="px-6 py-3">검사명</th>
+                    <th className="px-6 py-3">시작일</th>
+                    <th className="px-6 py-3">종료일</th>
+                    <th className="px-6 py-3">상태</th>
+                    <th className="px-6 py-3">결과</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tests.map((test) => (
+                    <tr key={test.cr_seq} className="bg-white border-b hover:bg-gray-50">
+                      <td className="px-6 py-4">{test.num}</td>
+                      <td className="px-6 py-4">{test.pd_name}</td>
+                      <td className="px-6 py-4">{test.startdate || '-'}</td>
+                      <td className="px-6 py-4">{test.enddate || '-'}</td>
+                      <td className="px-6 py-4">
+                        {test.done === 'R' ? (
+                          <span className="px-2 py-1 text-xs text-yellow-700 bg-yellow-100 rounded-full">진행중</span>
+                        ) : (
+                          <span className="px-2 py-1 text-xs text-green-700 bg-green-100 rounded-full">완료</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4">
+                        {test.rview === 'Y' || test.rview === 'P' ? (
+                          <button
+                            onClick={() => router.push(`/test-result/${test.cr_seq}`)}
+                            className="px-3 py-1 text-xs text-white bg-blue-500 rounded hover:bg-blue-600"
+                          >
+                            결과보기
+                          </button>
+                        ) : (
+                          <span className="text-gray-400">결과 없음</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          
+          {error && (
+            <div className="p-4 mt-4 text-center text-red-500 border border-red-200 rounded-md">
+              테스트 결과를 가져오는데 실패했습니다
+            </div>
+          )}
         </div>
       </div>
     </div>

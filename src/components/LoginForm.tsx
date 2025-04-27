@@ -29,6 +29,8 @@ export default function LoginForm() {
     }
 
     try {
+      console.log("로그인 시도:", { username, loginType, withSessionCode: loginType === "organization" });
+      
       const result = await signIn("credentials", {
         redirect: false,
         username,
@@ -37,13 +39,17 @@ export default function LoginForm() {
         sessionCode: loginType === "organization" ? sessionCode : undefined,
       });
 
+      console.log("로그인 결과:", result);
+
       if (result?.error) {
         setError("아이디 또는 비밀번호가 올바르지 않습니다.");
-      } else {
+      } else if (result?.ok) {
         router.push("/dashboard");
+      } else {
+        setError("로그인 처리 중 오류가 발생했습니다.");
       }
     } catch (err) {
-      console.error(err);
+      console.error("로그인 예외 발생:", err);
       setError("로그인 중 오류가 발생했습니다.");
     } finally {
       setIsLoading(false);
@@ -57,8 +63,11 @@ export default function LoginForm() {
     }
 
     setIsLoading(true);
+    setError("");
+    
     try {
-      // 실제로는 서버에서 유효성 검사를 수행합니다
+      console.log("회차코드 검증 요청:", sessionCode);
+      
       const response = await fetch("/api/verify-session-code", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -66,16 +75,17 @@ export default function LoginForm() {
       });
 
       const data = await response.json();
+      console.log("회차코드 검증 결과:", data);
       
       if (data.valid) {
         setIsCodeVerified(true);
         setError("");
       } else {
         setIsCodeVerified(false);
-        setError("유효하지 않은 회차코드입니다.");
+        setError(data.message || "유효하지 않은 회차코드입니다.");
       }
     } catch (err) {
-      console.error(err);
+      console.error("회차코드 검증 예외 발생:", err);
       setError("회차코드 검증 중 오류가 발생했습니다.");
       setIsCodeVerified(false);
     } finally {

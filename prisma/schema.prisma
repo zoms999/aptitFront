@@ -25,8 +25,8 @@ model mwd_account {
   mwd_account_memo      mwd_account_memo?
   mwd_answer_progress   mwd_answer_progress[]
   mwd_choice_result     mwd_choice_result[]
-  mwd_log_account       mwd_log_account[]       @ignore
-  mwd_log_login_account mwd_log_login_account[] @ignore
+  mwd_log_account       mwd_log_account[]
+  mwd_log_login_account mwd_log_login_account[]
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
@@ -39,7 +39,7 @@ model mwd_account_inquiry {
   ins_seq                   Int
   ai_reply                  String                      @db.Char(1)
   mwd_institute             mwd_institute               @relation(fields: [ins_seq], references: [ins_seq], onDelete: NoAction, onUpdate: NoAction)
-  mwd_account_inquiry_reply mwd_account_inquiry_reply[] @ignore
+  mwd_account_inquiry_reply mwd_account_inquiry_reply[]
 }
 
 /// The underlying table does not contain a valid unique identifier and can therefore currently not be handled by Prisma Client.
@@ -90,7 +90,7 @@ model mwd_answer_progress {
   mwd_account         mwd_account           @relation(fields: [ac_gid], references: [ac_gid], onDelete: NoAction, onUpdate: NoAction)
   mwd_choice_result   mwd_choice_result     @relation(fields: [ac_gid, cr_seq], references: [ac_gid, cr_seq], onDelete: NoAction, onUpdate: NoAction, map: "mwd_answer_progress_ac_gid_fkey1")
   mwd_question        mwd_question          @relation(fields: [qu_code], references: [qu_code], onDelete: NoAction, onUpdate: NoAction)
-  mwd_log_view_result mwd_log_view_result[] @ignore
+  mwd_log_view_result mwd_log_view_result[]
   mwd_resduty         mwd_resduty[]
   mwd_resjob          mwd_resjob[]
   mwd_resval          mwd_resval?
@@ -112,9 +112,12 @@ model mwd_choice_result {
   ins_seq             Int?
   tur_seq             Int?
   cr_pay              String?               @db.Char(1)
+  order_id            String?               @db.VarChar(50)
+  payment_status      String?               @db.VarChar(20)
   mwd_answer_progress mwd_answer_progress[]
   mwd_account         mwd_account           @relation(fields: [ac_gid], references: [ac_gid], onDelete: NoAction, onUpdate: NoAction)
   mwd_product         mwd_product           @relation(fields: [pd_num], references: [pd_num], onDelete: NoAction, onUpdate: NoAction, map: "mwd_choice_result_fk")
+  mwd_payment         mwd_payment[]
 
   @@id([ac_gid, cr_seq])
 }
@@ -227,7 +230,7 @@ model mwd_institute_turn {
   tur_req_sum          Int
   tur_use_sum          Int
   tur_code             String                 @db.VarChar(30)
-  mwd_institute_member mwd_institute_member[] @ignore
+  mwd_institute_member mwd_institute_member[]
   mwd_institute        mwd_institute          @relation(fields: [ins_seq], references: [ins_seq], onDelete: NoAction, onUpdate: NoAction, map: "mwd_institute_turn_fk")
 
   @@id([ins_seq, tur_seq], map: "mwd_institute_turn_pk")
@@ -350,10 +353,10 @@ model mwd_manager {
   mg_grant_statistic        Int                         @db.SmallInt
   mg_grant_inquiry          Int                         @db.SmallInt
   mg_grant_institute        Int                         @db.SmallInt
-  mwd_account_inquiry_reply mwd_account_inquiry_reply[] @ignore
-  mwd_log_login_manager     mwd_log_login_manager[]     @ignore
-  mwd_log_manager           mwd_log_manager[]           @ignore
-  mwd_log_view_result       mwd_log_view_result[]       @ignore
+  mwd_account_inquiry_reply mwd_account_inquiry_reply[]
+  mwd_log_login_manager     mwd_log_login_manager[]
+  mwd_log_manager           mwd_log_manager[]
+  mwd_log_view_result       mwd_log_view_result[]
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
@@ -379,7 +382,7 @@ model mwd_person {
   pe_school_year       String                 @db.VarChar(10)
   pe_job_name          String                 @db.VarChar(50)
   pe_job_detail        String                 @db.VarChar(100)
-  mwd_institute_member mwd_institute_member[] @ignore
+  mwd_institute_member mwd_institute_member[]
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
@@ -599,17 +602,81 @@ model mwd_tendency_subject_map {
   tsm_subject_choice_code String? @db.Char(8)
 }
 
-// AI 요약 저장을 위한 새로운 모델
 model aisummary {
-  id         String   @id @default(uuid())
-  userid     String   
-  tabtype    String   
-  summary    String   
-  createdat  DateTime @default(now())
-  updatedat  DateTime @updatedAt
-  analysistype String? // 분석 유형 필드 추가: tendency, trait, preference, integrated
+  id           String   @id @default(uuid())
+  userid       String
+  tabtype      String
+  summary      String
+  createdat    DateTime @default(now())
+  updatedat    DateTime @updatedAt
+  analysistype String?
 
   @@unique([userid, tabtype])
   @@index([userid])
   @@index([tabtype])
+}
+
+/// 결제 정보 테이블
+model mwd_payment {
+  payment_id                  Int                           @id @default(autoincrement())
+  ac_gid                      String                        @db.Uuid
+  cr_seq                      Int
+  order_id                    String                        @unique @db.VarChar(50)
+  amount                      Int
+  method                      String?                       @db.VarChar(20)
+  status                      String                        @db.VarChar(20)
+  requested_at                DateTime                      @default(now())
+  approved_at                 DateTime?
+  fail_reason                 String?                       @db.VarChar(200)
+  payment_key                 String?                       @db.VarChar(100)
+  payment_type                String?                       @db.VarChar(20)
+  provider                    String?                       @db.VarChar(50)
+  receipt_url                 String?                       @db.VarChar(200)
+  mwd_choice_result           mwd_choice_result             @relation(fields: [ac_gid, cr_seq], references: [ac_gid, cr_seq], onDelete: NoAction, onUpdate: NoAction)
+  mwd_payment_card            mwd_payment_card[]
+  mwd_payment_virtual_account mwd_payment_virtual_account[]
+}
+
+/// 결제 카드 정보
+model mwd_payment_card {
+  id                      Int          @id @default(autoincrement())
+  payment_id              Int?
+  card_company            String?      @db.VarChar(50)
+  card_number             String?      @db.VarChar(20)
+  installment_plan_months Int?         @default(0)
+  approval_number         String?      @db.VarChar(50)
+  card_type               String?      @db.VarChar(20)
+  owner_type              String?      @db.VarChar(20)
+  created_at              DateTime?    @default(now()) @db.Timestamp(6)
+  mwd_payment             mwd_payment? @relation(fields: [payment_id], references: [payment_id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+/// 가상계좌 정보
+model mwd_payment_virtual_account {
+  id             Int          @id @default(autoincrement())
+  payment_id     Int?
+  account_number String?      @db.VarChar(50)
+  bank_code      String?      @db.VarChar(20)
+  customer_name  String?      @db.VarChar(50)
+  due_date       DateTime?    @db.Timestamp(6)
+  refund_status  String?      @db.VarChar(20)
+  created_at     DateTime?    @default(now()) @db.Timestamp(6)
+  mwd_payment    mwd_payment? @relation(fields: [payment_id], references: [payment_id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+/// 결제 로그 테이블
+model mwd_payment_log {
+  id             Int      @id @default(autoincrement())
+  order_id       String   @db.VarChar(50)
+  amount         Int
+  order_name     String   @db.VarChar(100)
+  ac_gid         String   @db.Uuid
+  product_id     Int?
+  product_type   String?  @db.VarChar(20)
+  payment_method String?  @db.VarChar(20)
+  status         String   @db.VarChar(20)
+  event_type     String?  @db.VarChar(20)
+  code           String?  @db.VarChar(50)
+  message        String?  @db.VarChar(200)
+  created_at     DateTime @default(now())
 }

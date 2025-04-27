@@ -6,6 +6,15 @@ declare module "next-auth" {
       name?: string | null;
       email?: string | null;
       image?: string | null;
+      type: string;
+      // 개인 사용자 추가 필드
+      sex?: string;
+      isPaid?: boolean;
+      productType?: string;
+      isExpired?: boolean;
+      state?: string;
+      // 기관 사용자 추가 필드
+      sessionCode?: string;
     };
   }
   
@@ -14,11 +23,30 @@ declare module "next-auth" {
     name?: string | null;
     email?: string | null;
     image?: string | null;
+    type: string;
+    // 개인 사용자 추가 필드
+    sex?: string;
+    isPaid?: boolean;
+    productType?: string;
+    isExpired?: boolean;
+    state?: string;
+    // 기관 사용자 추가 필드
+    sessionCode?: string;
   }
 }
 
 declare module "next-auth/jwt" {
   interface JWT {
     id: string;
+    name?: string | null;
+    type: string;
+    // 개인 사용자 추가 필드
+    sex?: string;
+    isPaid?: boolean;
+    productType?: string;
+    isExpired?: boolean;
+    state?: string;
+    // 기관 사용자 추가 필드
+    sessionCode?: string;
   }
 } 

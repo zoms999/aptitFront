@@ -1,6 +1,6 @@
-import NextAuth from "next-auth/next";
+import NextAuth from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-import { db } from "../../../../lib/db/prisma";
+import { db } from "./db/prisma";
 
 // 계정 결과 타입 정의
 interface AccountResult {
@@ -23,41 +23,12 @@ interface GenderResult {
   pe_sex: string;
 }
 
-// 사용자 확장 타입
-declare module "next-auth" {
-  interface User {
-    id: string;
-    name?: string | null;
-    type: string;
-    sex?: string;
-    isPaid?: boolean;
-    productType?: string;
-    isExpired?: boolean;
-    state?: string;
-    sessionCode?: string;
-  }
-  
-  interface Session {
-    user: User;
-  }
-}
-
-declare module "next-auth/jwt" {
-  interface JWT {
-    id: string;
-    name?: string | null;
-    type: string;
-    sex?: string;
-    isPaid?: boolean;
-    productType?: string;
-    isExpired?: boolean;
-    state?: string;
-    sessionCode?: string;
-  }
-}
-
-// Auth 옵션 정의
-const authOptions = {
+export const {
+  handlers: { GET, POST },
+  auth,
+  signIn,
+  signOut,
+} = NextAuth({
   debug: process.env.NODE_ENV === 'development',
   providers: [
     CredentialsProvider({
@@ -248,7 +219,7 @@ const authOptions = {
     error: "/login?error=true"
   },
   session: {
-    strategy: "jwt" as const,
+    strategy: "jwt",
     maxAge: 30 * 24 * 60 * 60, // 30일
   },
   callbacks: {
@@ -289,8 +260,4 @@ const authOptions = {
       return session;
     },
   },
-};
-
-// NextAuth 핸들러 생성
-const handler = NextAuth(authOptions);
-export { handler as GET, handler as POST }; 
+}); 
