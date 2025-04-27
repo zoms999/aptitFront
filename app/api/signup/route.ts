@@ -1,5 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '../../../lib/db';
+import { db } from '../../../lib/db/prisma';
+
+// 응답 타입 정의
+interface InstituteInfo {
+  ins_seq: number;
+  tur_seq: number;
+  tur_use: string;
+  tur_req_sum: number;
+  tur_use_sum: number;
+}
+
+interface AccountInfo {
+  ac_use: string;
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -30,7 +43,9 @@ export async function POST(request: NextRequest) {
       userAgent,
       agreeTerms,
       agreePrivacy,
-      agreeMarketing
+      agreeMarketing,
+      instituteSeq,
+      turnSeq
     } = await request.json();
 
     // 필수 필드 검증
@@ -80,11 +95,11 @@ export async function POST(request: NextRequest) {
     console.log('1. 계정 사용 여부 조회 시작');
     // 1. 계정 사용 여부 조회
     try {
-      const existingAccount = await db.$queryRaw`
+      const existingAccount = await db.$queryRaw<AccountInfo[]>`
         SELECT ac_use FROM mwd_account WHERE ac_id = ${username.toLowerCase()}
       `;
 
-      if (existingAccount.length > 0) {
+      if (existingAccount && existingAccount.length > 0) {
         return NextResponse.json(
           { success: false, message: '이미 사용 중인 아이디입니다.' },
           { status: 400 }
@@ -127,7 +142,7 @@ export async function POST(request: NextRequest) {
     // 3. 사용자(person) 정보 삽입
     let peSeq;
     try {
-      const personResult = await db.$queryRaw`
+      const personResult = await db.$queryRaw<{pe_seq: number}[]>`
         INSERT INTO mwd_person (
           pe_seq, pe_email, pe_name, pe_birth_year, pe_birth_month, pe_birth_day, pe_sex,
           pe_cellphone, pe_contact, pe_postcode, pe_road_addr, pe_jibun_addr, pe_detail_addr,
@@ -155,23 +170,12 @@ export async function POST(request: NextRequest) {
     // 4. 계정(account) 정보 삽입
     let acGid;
     try {
-      // 쿼리 로깅
-      console.log('계정 정보 삽입 쿼리 파라미터:', {
-        username: username.toLowerCase(),
-        peSeq,
-        agreeTerms,
-        agreePrivacy,
-        agreeMarketing: agreeMarketing || false
-      });
-      
       // Boolean 값을 'Y'/'N' 문자로 변환
       const termsUse = agreeTerms ? 'Y' : 'N';
       const termsPerson = agreePrivacy ? 'Y' : 'N';
       const termsEvent = agreeMarketing ? 'Y' : 'N';
       
-      console.log('변환된 약관 동의 값:', { termsUse, termsPerson, termsEvent });
-      
-      const accountResult = await db.$queryRaw`
+      const accountResult = await db.$queryRaw<{ac_gid: string}[]>`
         INSERT INTO mwd_account (
           ac_id, ac_pw, ac_use, ac_insert_date, ac_leave_date, 
           ac_gid, ins_seq, pe_seq, ac_expire_date,
@@ -187,12 +191,9 @@ export async function POST(request: NextRequest) {
       acGid = accountResult[0].ac_gid;
     } catch (error) {
       console.error('계정 정보 삽입 오류:', error);
-      // 쿼리 오류 상세 로깅
       if (error instanceof Error) {
         console.error('오류 메시지:', error.message);
         console.error('오류 스택:', error.stack);
-      } else {
-        console.error('알 수 없는 오류 타입:', error);
       }
       throw new Error(`계정 정보 삽입 오류: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
     }
@@ -200,12 +201,6 @@ export async function POST(request: NextRequest) {
     console.log('5. 로그인 기록 삽입 시작');
     // 5. 로그인 기록 삽입
     try {
-      // 로그인 기록 쿼리 로깅
-      console.log('로그인 기록 삽입 쿼리 파라미터:', {
-        userAgent: userAgent || 'Unknown',
-        acGid
-      });
-      
       await db.$queryRaw`
         INSERT INTO mwd_log_login_account (
           login_date, user_agent, ac_gid
@@ -216,23 +211,11 @@ export async function POST(request: NextRequest) {
     } catch (error) {
       console.error('로그인 기록 삽입 오류:', error);
       // 로그 오류는 치명적이지 않으므로 계속 진행
-      if (error instanceof Error) {
-        console.error('오류 메시지:', error.message);
-        console.error('오류 스택:', error.stack);
-      }
     }
 
     console.log('6. 계정 액션 기록 삽입 시작');
     // 6. 계정 액션 기록 삽입
     try {
-      // 계정 액션 기록 쿼리 로깅
-      console.log('계정 액션 기록 삽입 쿼리 파라미터:', {
-        actionType: 'JOIN',
-        actionReason: '개인',
-        actionResult: 'SUCCESS',
-        acGid
-      });
-      
       await db.$queryRaw`
         INSERT INTO mwd_log_account (
           action_date, action_type, action_reason, action_result, action_func, ac_gid, mg_seq
@@ -243,10 +226,70 @@ export async function POST(request: NextRequest) {
     } catch (error) {
       console.error('계정 액션 기록 삽입 오류:', error);
       // 액션 로그 오류는 치명적이지 않으므로 계속 진행
-      if (error instanceof Error) {
-        console.error('오류 메시지:', error.message);
-        console.error('오류 스택:', error.stack);
+    }
+
+    console.log('7. 기관 차수에 회원 등록 시작');
+    // 7. 기관 차수에 회원 등록
+    try {
+      // 유효한 기관 및 차수인지 확인
+      const instituteResult = await db.$queryRaw<InstituteInfo[]>`
+        SELECT ins_seq, tur_seq, tur_use, tur_req_sum, tur_use_sum
+        FROM mwd_institute_turn
+        WHERE ins_seq = ${instituteSeq} AND tur_seq = ${turnSeq}
+      `;
+      
+      if (!instituteResult || instituteResult.length === 0) {
+        throw new Error('유효하지 않은 기관 정보입니다.');
       }
+      
+      const instituteInfo = instituteResult[0];
+      
+      if (instituteInfo.tur_use !== 'Y') {
+        throw new Error('사용 중지된 기관 회차입니다.');
+      }
+      
+      if (instituteInfo.tur_use_sum >= instituteInfo.tur_req_sum) {
+        throw new Error('해당 기관 회차의 신청 가능 인원이 초과되었습니다.');
+      }
+
+      // 차수 사용 수량 업데이트
+      await db.$queryRaw`
+        UPDATE mwd_institute_turn
+        SET tur_use_sum = tur_use_sum + 1
+        WHERE tur_use = 'Y'
+          AND tur_use_sum < tur_req_sum
+          AND ins_seq = ${instituteSeq}
+          AND tur_seq = ${turnSeq}
+      `;
+
+      // 기관 차수에 회원 등록
+      await db.$queryRaw`
+        INSERT INTO mwd_institute_member (
+          ins_seq, tur_seq, pe_seq, mem_insert_date
+        ) VALUES (
+          ${instituteSeq}, ${turnSeq}, ${peSeq}, now()
+        )
+      `;
+    } catch (error) {
+      console.error('기관 차수에 회원 등록 오류:', error);
+      // 계속 진행 (선택적 기능)
+    }
+
+    console.log('8. 선택 결과 저장 시도');
+    // 8. 선택 결과 저장 시도
+    try {
+      await db.$queryRaw`
+        INSERT INTO mwd_choice_result (
+          ac_gid, cr_seq, cr_pay, cr_duty, cr_study, cr_subject, cr_image,
+          pd_kind, pd_price, cr_paymentdate, pd_num, ins_seq, tur_seq
+        ) VALUES (
+          ${acGid}, (SELECT NEXTVAL('cr_seq')), 'Y', 'Y', 'Y', 'Y', 'Y',
+          'premium', 0, now(), 'auto', ${instituteSeq}, ${turnSeq}
+        )
+      `;
+    } catch (error) {
+      console.warn('선택 결과 저장 중 오류 (무시됨):', error);
+      // 선택 결과 저장 실패는 무시하고 진행
     }
 
     console.log('회원가입 완료');
