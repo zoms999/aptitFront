@@ -1,0 +1,81 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Account {
+  acGid         String    @id @default(uuid()) @map("ac_gid")
+  acId          String    @map("ac_id")
+  acPw          String    @map("ac_pw")
+  acExpireDate  DateTime  @map("ac_expire_date")
+  acInsertDate  DateTime  @default(now()) @map("ac_insert_date")
+  acLeaveDate   DateTime? @map("ac_leave_date")
+  acUse         String    @map("ac_use")
+  insSeq        Int       @map("ins_seq")
+  peSeq         Int       @map("pe_seq")
+  acTermsUse    Boolean   @map("ac_terms_use")
+  acTermsPerson Boolean   @map("ac_terms_person")
+  acTermsEvent  Boolean   @map("ac_terms_event")
+  person        Person?   @relation(fields: [peSeq], references: [peSeq])
+
+  @@map("mwd_account")
+}
+
+model Person {
+  peSeq           Int       @id @map("pe_seq")
+  peEmail         String    @map("pe_email")
+  peName          String    @map("pe_name")
+  peBirthYear     Int       @map("pe_birth_year")
+  peBirthMonth    Int       @map("pe_birth_month")
+  peBirthDay      Int       @map("pe_birth_day")
+  peSex           String    @map("pe_sex")
+  peCellphone     String    @map("pe_cellphone")
+  peContact       String?   @map("pe_contact")
+  pePostcode      String    @map("pe_postcode")
+  peRoadAddr      String    @map("pe_road_addr")
+  peJibunAddr     String    @map("pe_jibun_addr")
+  peDetailAddr    String?   @map("pe_detail_addr")
+  peExtraAddr     String?   @map("pe_extra_addr")
+  peUrEducation   String    @map("pe_ur_education")
+  peSchoolName    String?   @map("pe_school_name")
+  peSchoolMajor   String?   @map("pe_school_major")
+  peSchoolYear    String?   @map("pe_school_year")
+  peUrJob         String    @map("pe_ur_job")
+  peJobName       String?   @map("pe_job_name")
+  peJobDetail     String?   @map("pe_job_detail")
+  accounts        Account[]
+
+  @@map("mwd_person")
+}
+
+model LogLoginAccount {
+  id        Int      @id @default(autoincrement())
+  loginDate DateTime @map("login_date")
+  userAgent String   @map("user_agent")
+  acGid     String   @map("ac_gid")
+
+  @@map("mwd_log_login_account")
+}
+
+model LogAccount {
+  id           Int      @id @default(autoincrement())
+  actionDate   DateTime @map("action_date")
+  actionType   String   @map("action_type")
+  actionReason String   @map("action_reason")
+  actionResult String   @map("action_result")
+  actionFunc   String   @map("action_func")
+  acGid        String   @map("ac_gid")
+  mgSeq        Int      @map("mg_seq")
+
+  @@map("mwd_log_account")
+}
