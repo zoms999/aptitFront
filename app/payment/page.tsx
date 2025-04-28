@@ -133,7 +133,17 @@ export default function PaymentPage() {
   // 상품 선택 처리
   const handleSelectProduct = (product: Product) => {
     setSelectedProduct(product);
-    setOrderId(`order_${nanoid()}`);
+    
+    // 가독성 있는 주문번호 생성
+    const today = new Date();
+    const dateStr = today.toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD
+    const timeStr = today.getHours().toString().padStart(2, '0') + 
+                    today.getMinutes().toString().padStart(2, '0');
+    const randomStr = nanoid(6).toUpperCase(); // 6자리 대문자 랜덤 문자열
+    
+    const orderId = `ORD-${dateStr}${timeStr}-${randomStr}`;
+    setOrderId(orderId);
+    
     setOrderName(product.pd_name);
     setAmount(product.pd_price);
     setProductId(product.pd_num.toString());
@@ -178,7 +188,16 @@ export default function PaymentPage() {
       
       const data = await response.json();
       
-      setOrderId(`order_${nanoid()}`);
+      // 가독성 있는 주문번호 생성
+      const today = new Date();
+      const dateStr = today.toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD
+      const timeStr = today.getHours().toString().padStart(2, '0') + 
+                      today.getMinutes().toString().padStart(2, '0');
+      const randomStr = nanoid(6).toUpperCase(); // 6자리 대문자 랜덤 문자열
+      
+      const orderId = `ORD-${dateStr}${timeStr}-${randomStr}`;
+      setOrderId(orderId);
+      
       setOrderName(data.orderName || '검사 프로그램');
       setAmount(data.amount || 30000);
       setProductId(data.productId || crSeq);

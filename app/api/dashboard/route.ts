@@ -2,87 +2,156 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { db } from '../../../lib/db/prisma';
 
+// 세션 타입 확장
+declare module "next-auth" {
+  interface Session {
+    user: {
+      id?: string;
+      name?: string | null;
+      email?: string | null;
+      image?: string | null;
+      ac_id?: string;
+    }
+  }
+}
+
 export async function GET() {
   try {
-    // 테스트 모드 활성화 - 개발 환경에서만 사용
-    const isTestMode = process.env.NODE_ENV === 'development';
-    
     const session = await getServerSession();
-    console.log('Session info:', JSON.stringify(session, null, 2));
     
-    // 테스트 모드일 경우 인증 우회 가능
-    if ((!session || !session.user) && !isTestMode) {
+    // 세션 정보 자세히 출력
+    console.log('Full session info:', JSON.stringify(session, null, 2));
+    
+    if (!session || !session.user) {
       return NextResponse.json({ error: '인증되지 않았습니다.' }, { status: 401 });
     }
     
-    // 테스트 모드이거나 실제 인증된 세션이 있을 경우 계속 진행
     let ac_gid;
     
-    if (isTestMode && (!session || !session.user)) {
-      console.log('Test mode enabled, using test account');
-      // 테스트용 계정 데이터 반환
-      return getTestDashboardData();
-    } else {
-      // session.user에서 사용자 정보 확인
-      console.log('Session user info:', session?.user);
-      
-      // session에 email이 있는지 확인
-      if (session?.user?.email) {
-        try {
-          // 이메일로 사용자 계정 ID 조회
-          const userEmail = session.user.email;
-          console.log('Looking up account by email:', userEmail);
-          
-          // 1. 이메일로 person 테이블에서 pe_seq 찾기
-          const personResult = await db.$queryRaw`
-            SELECT pe_seq FROM mwd_person WHERE pe_email = ${userEmail}
-          `;
-          
-          console.log('Person query result:', JSON.stringify(personResult, null, 2));
-          
-          if (!Array.isArray(personResult) || personResult.length === 0) {
-            if (isTestMode) {
-              return getTestDashboardData();
-            }
-            return NextResponse.json({ error: '사용자 정보를 찾을 수 없습니다.' }, { status: 404 });
-          }
-          
-          const pe_seq = personResult[0].pe_seq;
-          
-          // 2. pe_seq로 account 테이블에서 ac_gid 찾기
-          const accountResult = await db.$queryRaw`
-            SELECT ac_gid FROM mwd_account 
-            WHERE pe_seq = ${pe_seq}
-            AND ac_use = 'Y'
-          `;
-          
-          console.log('Account query result:', JSON.stringify(accountResult, null, 2));
-          
-          if (!Array.isArray(accountResult) || accountResult.length === 0) {
-            if (isTestMode) {
-              return getTestDashboardData();
-            }
-            return NextResponse.json({ error: '계정 정보를 찾을 수 없습니다.' }, { status: 404 });
-          }
-          
-          ac_gid = accountResult[0].ac_gid;
-        } catch (queryError) {
-          console.error('Query error:', queryError);
-          if (isTestMode) {
-            return getTestDashboardData();
-          }
-          throw queryError;
+    // session.user에서 사용자 정보 확인
+    console.log('Session user info:', JSON.stringify(session.user, null, 2));
+    
+    // session에 ac_id가 있는지 확인 (타입 단언 사용)
+    const userAny = session.user as any;
+    
+    if (userAny.ac_id) {
+      try {
+        // ac_id로 사용자 계정 조회
+        const accountResult = await db.$queryRaw`
+          SELECT ac_gid FROM mwd_account 
+          WHERE ac_id = ${userAny.ac_id}
+          AND ac_use = 'Y'
+        `;
+        
+        console.log('Account query result by ac_id:', JSON.stringify(accountResult, null, 2));
+        
+        if (!Array.isArray(accountResult) || accountResult.length === 0) {
+          return NextResponse.json({ error: '계정 정보를 찾을 수 없습니다.' }, { status: 404 });
         }
-      } else if (session?.user?.name && isTestMode) {
-        // 테스트 모드에서 이름만 있는 경우 (개발용)
-        console.log('Only name available in test mode');
-        return getTestDashboardData();
-      } else {
-        if (isTestMode) {
-          return getTestDashboardData();
-        }
-        return NextResponse.json({ error: '사용자 이메일 정보가 없습니다.' }, { status: 400 });
+        
+        ac_gid = accountResult[0].ac_gid;
+      } catch (queryError) {
+        console.error('Query error:', queryError);
+        throw queryError;
       }
+    } else if (userAny.id) {
+      // id가 ac_gid인 경우
+      try {
+        ac_gid = userAny.id;
+        console.log('Using id as ac_gid:', ac_gid);
+        
+        // ac_gid 유효성 검증
+        const validateResult = await db.$queryRaw`
+          SELECT 1 FROM mwd_account 
+          WHERE ac_gid = ${ac_gid}::uuid
+          AND ac_use = 'Y'
+        `;
+        
+        if (!Array.isArray(validateResult) || validateResult.length === 0) {
+          return NextResponse.json({ error: '계정 정보를 찾을 수 없습니다.' }, { status: 404 });
+        }
+      } catch (queryError) {
+        console.error('Error validating ac_gid:', queryError);
+        throw queryError;
+      }
+    } else if (session.user.email) {
+      try {
+        // 이메일로 사용자 계정 ID 조회
+        const userEmail = session.user.email;
+        console.log('Looking up account by email:', userEmail);
+        
+        // 1. 이메일로 person 테이블에서 pe_seq 찾기
+        const personResult = await db.$queryRaw`
+          SELECT pe_seq FROM mwd_person WHERE pe_email = ${userEmail}
+        `;
+        
+        console.log('Person query result:', JSON.stringify(personResult, null, 2));
+        
+        if (!Array.isArray(personResult) || personResult.length === 0) {
+          return NextResponse.json({ error: '사용자 정보를 찾을 수 없습니다.' }, { status: 404 });
+        }
+        
+        const pe_seq = personResult[0].pe_seq;
+        
+        // 2. pe_seq로 account 테이블에서 ac_gid 찾기
+        const accountResult = await db.$queryRaw`
+          SELECT ac_gid FROM mwd_account 
+          WHERE pe_seq = ${pe_seq}
+          AND ac_use = 'Y'
+        `;
+        
+        console.log('Account query result by email:', JSON.stringify(accountResult, null, 2));
+        
+        if (!Array.isArray(accountResult) || accountResult.length === 0) {
+          return NextResponse.json({ error: '계정 정보를 찾을 수 없습니다.' }, { status: 404 });
+        }
+        
+        ac_gid = accountResult[0].ac_gid;
+      } catch (queryError) {
+        console.error('Query error:', queryError);
+        throw queryError;
+      }
+    } else if (session.user.name) {
+      try {
+        // 이름으로 사용자 계정 조회 (마지막 방법)
+        const userName = session.user.name;
+        console.log('Looking up account by name:', userName);
+        
+        // 이름으로 person 테이블에서 pe_seq 찾기
+        const personResult = await db.$queryRaw`
+          SELECT pe_seq FROM mwd_person WHERE pe_name = ${userName}
+        `;
+        
+        console.log('Person query result by name:', JSON.stringify(personResult, null, 2));
+        
+        if (!Array.isArray(personResult) || personResult.length === 0) {
+          return NextResponse.json({ error: '사용자 정보를 찾을 수 없습니다.' }, { status: 404 });
+        }
+        
+        // 여러 사람이 같은 이름일 수 있으므로 첫 번째 결과만 사용
+        const pe_seq = personResult[0].pe_seq;
+        
+        // pe_seq로 account 테이블에서 ac_gid 찾기
+        const accountResult = await db.$queryRaw`
+          SELECT ac_gid FROM mwd_account 
+          WHERE pe_seq = ${pe_seq}
+          AND ac_use = 'Y'
+        `;
+        
+        console.log('Account query result by name:', JSON.stringify(accountResult, null, 2));
+        
+        if (!Array.isArray(accountResult) || accountResult.length === 0) {
+          return NextResponse.json({ error: '계정 정보를 찾을 수 없습니다.' }, { status: 404 });
+        }
+        
+        ac_gid = accountResult[0].ac_gid;
+      } catch (queryError) {
+        console.error('Query error when looking up by name:', queryError);
+        throw queryError;
+      }
+    } else {
+      console.log('No ac_id, id, email or name found in session');
+      return NextResponse.json({ error: '사용자 정보가 없습니다.' }, { status: 400 });
     }
     
     // 1. 계정 상태 조회
@@ -101,7 +170,7 @@ export async function GET() {
         FROM mwd_person pe, mwd_account ac
         LEFT JOIN mwd_choice_result cr ON cr.ac_gid = ac.ac_gid
         LEFT JOIN mwd_answer_progress ap ON ap.cr_seq = cr.cr_seq
-        WHERE ac.ac_gid = ${ac_gid}
+        WHERE ac.ac_gid = ${ac_gid}::uuid
           AND pe.pe_seq = ac.pe_seq 
           AND ac.ac_use = 'Y'
       ) t 
@@ -131,7 +200,7 @@ export async function GET() {
             TO_CHAR(ac.ac_expire_date, 'yyyy-mm-dd') AS expiredate
       FROM mwd_product pr, mwd_account ac, mwd_choice_result cr
       LEFT JOIN mwd_answer_progress ap ON ap.cr_seq = cr.cr_seq
-      WHERE ac.ac_gid = ${ac_gid}
+      WHERE ac.ac_gid = ${ac_gid}::uuid
         AND cr.ac_gid = ac.ac_gid 
         AND pr.pd_num = cr.pd_num
     `;
@@ -141,11 +210,41 @@ export async function GET() {
       ? testsResult.filter(test => test.done === 'E').length 
       : 0;
     
+    // BigInt 값을 문자열로 변환하는 함수
+    const convertBigIntToString = (obj) => {
+      if (obj === null || obj === undefined) return obj;
+      
+      if (typeof obj === 'bigint') {
+        return obj.toString();
+      }
+      
+      if (Array.isArray(obj)) {
+        return obj.map(item => convertBigIntToString(item));
+      }
+      
+      if (typeof obj === 'object') {
+        const result = {};
+        for (const key in obj) {
+          result[key] = convertBigIntToString(obj[key]);
+        }
+        return result;
+      }
+      
+      return obj;
+    };
+    
+    // 결과 처리 - BigInt 처리
+    const safeAccountStatus = Array.isArray(accountStatusResult) && accountStatusResult.length > 0 
+      ? convertBigIntToString(accountStatusResult[0])
+      : { cr_pay: 'N', pd_kind: '', expire: 'N', state: 'R' };
+      
+    const safeTests = Array.isArray(testsResult) 
+      ? convertBigIntToString(testsResult)
+      : [];
+    
     return NextResponse.json({
-      accountStatus: Array.isArray(accountStatusResult) && accountStatusResult.length > 0 
-        ? accountStatusResult[0] 
-        : { cr_pay: 'N', pd_kind: '', expire: 'N', state: 'R' },
-      tests: Array.isArray(testsResult) ? testsResult : [],
+      accountStatus: safeAccountStatus,
+      tests: safeTests,
       completedTests
     });
     
@@ -156,44 +255,4 @@ export async function GET() {
       { status: 500 }
     );
   }
-}
-
-// 테스트 데이터 반환 함수
-function getTestDashboardData() {
-  console.log('Returning test data for dashboard');
-  return NextResponse.json({
-    accountStatus: { 
-      cr_pay: 'Y', 
-      pd_kind: 'basic', 
-      expire: 'Y', 
-      state: 'E' 
-    },
-    tests: [
-      {
-        num: 1,
-        cr_seq: 100,
-        cr_pay: 'Y',
-        pd_name: '테스트 검사',
-        anp_seq: 101,
-        startdate: '2023-08-01 10:00:00',
-        enddate: '2023-08-03',
-        done: 'E',
-        rview: 'Y',
-        expiredate: '2024-08-01'
-      },
-      {
-        num: 2,
-        cr_seq: 101,
-        cr_pay: 'Y',
-        pd_name: '진행 중인 검사',
-        anp_seq: 102,
-        startdate: '2023-09-15 09:30:00',
-        enddate: '',
-        done: 'R',
-        rview: 'N',
-        expiredate: '2024-09-15'
-      }
-    ],
-    completedTests: 1
-  });
 } 

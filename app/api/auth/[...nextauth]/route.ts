@@ -8,6 +8,7 @@ interface AccountResult {
   pe_name: string;
   ac_gid: string;
   ac_use: string;
+  ac_id: string;
 }
 
 // 결제 상태 결과 타입 정의
@@ -24,36 +25,29 @@ interface GenderResult {
 }
 
 // 사용자 확장 타입
+interface CustomUser {
+  id: string;
+  name?: string | null;
+  email?: string | null;
+  image?: string | null;
+  type: string;
+  sex?: string;
+  isPaid?: boolean;
+  productType?: string;
+  isExpired?: boolean;
+  state?: string;
+  sessionCode?: string;
+  ac_id?: string;
+}
+
 declare module "next-auth" {
-  interface User {
-    id: string;
-    name?: string | null;
-    type: string;
-    sex?: string;
-    isPaid?: boolean;
-    productType?: string;
-    isExpired?: boolean;
-    state?: string;
-    sessionCode?: string;
-  }
-  
   interface Session {
-    user: User;
+    user: CustomUser;
   }
 }
 
 declare module "next-auth/jwt" {
-  interface JWT {
-    id: string;
-    name?: string | null;
-    type: string;
-    sex?: string;
-    isPaid?: boolean;
-    productType?: string;
-    isExpired?: boolean;
-    state?: string;
-    sessionCode?: string;
-  }
+  interface JWT extends CustomUser {}
 }
 
 // Auth 옵션 정의
@@ -78,7 +72,7 @@ const authOptions = {
           if (credentials.loginType === "personal") {
             // 사용자 계정 정보 조회
             const accountResult = await db.$queryRaw<AccountResult[]>`
-              SELECT pe.pe_seq, pe.pe_name, ac.ac_gid, ac.ac_use 
+              SELECT pe.pe_seq, pe.pe_name, ac.ac_gid, ac.ac_use, ac.ac_id
               FROM mwd_person pe, mwd_account ac 
               WHERE ac.pe_seq = pe.pe_seq 
                 AND ac.ac_id = lower(${credentials.username}) 
@@ -164,7 +158,8 @@ const authOptions = {
               isPaid: paymentResult.length > 0 ? paymentResult[0].cr_pay === 'Y' : false,
               productType: paymentResult.length > 0 ? paymentResult[0].pd_kind : "",
               isExpired: paymentResult.length > 0 ? paymentResult[0].expire === 'N' : true,
-              state: paymentResult.length > 0 ? paymentResult[0].state : "R"
+              state: paymentResult.length > 0 ? paymentResult[0].state : "R",
+              ac_id: accountResult[0].ac_id
             };
           } 
           // 기관 계정 로그인 (세션코드 필요)
@@ -195,7 +190,7 @@ const authOptions = {
 
             // 사용자 계정 정보 조회
             const accountResult = await db.$queryRaw<AccountResult[]>`
-              SELECT pe.pe_seq, pe.pe_name, ac.ac_gid, ac.ac_use 
+              SELECT pe.pe_seq, pe.pe_name, ac.ac_gid, ac.ac_use, ac.ac_id
               FROM mwd_person pe, mwd_account ac 
               WHERE ac.pe_seq = pe.pe_seq 
                 AND ac.ac_id = lower(${credentials.username}) 
@@ -231,7 +226,8 @@ const authOptions = {
               id: acGid,
               name: peName,
               type: "organization",
-              sessionCode: credentials.sessionCode
+              sessionCode: credentials.sessionCode,
+              ac_id: accountResult[0].ac_id
             };
           }
 
@@ -257,6 +253,11 @@ const authOptions = {
         token.id = user.id;
         token.name = user.name;
         token.type = user.type;
+        token.ac_id = user.ac_id;
+        
+        // 디버깅을 위한 로그 추가
+        console.log('JWT User:', JSON.stringify(user, null, 2));
+        console.log('JWT Token after update:', JSON.stringify(token, null, 2));
         
         if (user.type === "personal") {
           token.sex = user.sex;
@@ -271,10 +272,15 @@ const authOptions = {
       return token;
     },
     async session({ session, token }) {
+      // 디버깅을 위한 로그 추가
+      console.log('Session Token:', JSON.stringify(token, null, 2));
+      console.log('Session Before:', JSON.stringify(session, null, 2));
+      
       if (token && session.user) {
         session.user.id = token.id as string;
         session.user.name = token.name as string;
         session.user.type = token.type as string;
+        session.user.ac_id = token.ac_id as string;
         
         if (token.type === "personal") {
           session.user.sex = token.sex as string;
@@ -286,6 +292,10 @@ const authOptions = {
           session.user.sessionCode = token.sessionCode as string;
         }
       }
+      
+      // 디버깅을 위한 로그 추가
+      console.log('Session After:', JSON.stringify(session, null, 2));
+      
       return session;
     },
   },
