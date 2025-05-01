@@ -33,6 +33,10 @@ interface DashboardData {
   accountStatus: AccountStatus;
   tests: Test[];
   completedTests: number;
+  isOrganization?: boolean;
+  instituteInfo?: Record<string, unknown>;
+  members?: Array<Record<string, unknown>>;
+  userInfo?: Record<string, unknown>;
 }
 
 export default function Dashboard() {
@@ -41,6 +45,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [errorDetails, setErrorDetails] = useState<Record<string, unknown> | null>(null);
 
   useEffect(() => {
     // 인증 상태 확인
@@ -58,6 +63,7 @@ export default function Dashboard() {
     try {
       setLoading(true);
       console.log('Fetching dashboard data...');
+      console.log('Session info:', session);
       
       const response = await fetch('/api/dashboard');
       console.log('API response status:', response.status);
@@ -65,23 +71,32 @@ export default function Dashboard() {
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         console.error('API error:', errorData);
+        setErrorDetails(errorData);
         throw new Error(errorData.error || '데이터를 가져오는데 실패했습니다');
       }
       
       const data = await response.json();
       console.log('Dashboard data received:', data);
       setDashboardData(data);
+      
+      // 회원 유형에 따라 적절한 대시보드 페이지로 리다이렉트
+      if (data.isOrganization !== undefined) {
+        if (data.isOrganization) {
+          // 기관 회원인 경우
+          router.push('/dashboard/organization');
+          return;
+        } else {
+          // 일반 회원인 경우
+          router.push('/dashboard/personal');
+          return;
+        }
+      }
     } catch (err) {
       console.error('Dashboard fetch error:', err);
       setError(err instanceof Error ? err.message : '오류가 발생했습니다');
     } finally {
       setLoading(false);
     }
-  };
-
-  // 결제 페이지로 이동
-  const handlePayment = () => {
-    router.push('/payment');
   };
 
   if (loading) {
@@ -99,6 +114,19 @@ export default function Dashboard() {
         <div className="w-full max-w-3xl p-6 bg-white rounded-lg shadow-md">
           <h1 className="mb-4 text-2xl font-bold text-red-500">오류 발생</h1>
           <p className="text-gray-700">{error}</p>
+          
+          {errorDetails && (
+            <div className="mt-4 p-4 bg-gray-100 rounded-md">
+              <h2 className="text-lg font-semibold mb-2">오류 상세 정보:</h2>
+              <pre className="text-sm overflow-auto">{JSON.stringify(errorDetails, null, 2)}</pre>
+            </div>
+          )}
+          
+          <div className="mt-4 p-4 bg-gray-100 rounded-md">
+            <h2 className="text-lg font-semibold mb-2">세션 정보:</h2>
+            <pre className="text-sm overflow-auto">{JSON.stringify(session, null, 2)}</pre>
+          </div>
+          
           <button 
             onClick={fetchDashboardData}
             className="px-4 py-2 mt-4 text-white bg-blue-500 rounded hover:bg-blue-600"
@@ -114,129 +142,18 @@ export default function Dashboard() {
     return null;
   }
 
-  const { accountStatus, tests, completedTests } = dashboardData;
-  
-  // 계정 상태에 따른 표시 정보
-  const isPaid = accountStatus.cr_pay === 'Y';
-  const isExpired = accountStatus.expire === 'N';
-  const expireDate = tests.length > 0 ? tests[0].expiredate : '만료일 없음';
-
+  // 기본 대시보드 페이지에 표시할 내용 (리다이렉트되지 않은 경우)
   return (
     <div className="flex flex-col min-h-screen">
-      {/* 상단 헤더 */}
       <Header />
-      
       <main className="flex-grow p-4 bg-gray-50">
         <div className="w-full max-w-4xl mx-auto">
-          {/* 환영 메시지 및 헤더 */}
           <div className="p-6 mb-6 bg-white rounded-lg shadow-md">
-            <h1 className="mb-2 text-2xl font-bold text-gray-800">
-              {session?.user?.name || '사용자'}님, 환영합니다!
-            </h1>
-            <div className="flex flex-wrap items-center justify-between">
-              <p className="text-gray-600">
-                대시보드에서 검사 결과와 계정 정보를 확인할 수 있습니다.
-              </p>
-              <button
-                onClick={handlePayment}
-                className="px-4 py-2 mt-4 text-white bg-blue-500 rounded-md hover:bg-blue-600 sm:mt-0"
-              >
-                결제하기
-              </button>
-            </div>
-          </div>
-
-          {/* 내 정보 카드 */}
-          <div className="p-6 mb-6 bg-white rounded-lg shadow-md">
-            <h2 className="mb-4 text-xl font-semibold text-gray-800">내 정보</h2>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-              <div className="p-4 border rounded-md">
-                <h3 className="mb-1 text-sm font-medium text-gray-500">계정 상태</h3>
-                <p className="text-lg font-semibold">{isPaid ? '결제 완료' : '미결제'}</p>
-              </div>
-              <div className="p-4 border rounded-md">
-                <h3 className="mb-1 text-sm font-medium text-gray-500">결제 상태</h3>
-                <p className={`text-lg font-semibold ${isPaid ? 'text-green-500' : 'text-red-500'}`}>
-                  {isPaid ? '결제됨' : '미결제'}
-                </p>
-              </div>
-              <div className="p-4 border rounded-md">
-                <h3 className="mb-1 text-sm font-medium text-gray-500">만료일</h3>
-                <p className={`text-lg font-semibold ${isExpired ? 'text-red-500' : 'text-green-500'}`}>
-                  {expireDate}
-                </p>
-              </div>
-              <div className="p-4 border rounded-md">
-                <h3 className="mb-1 text-sm font-medium text-gray-500">완료된 검사</h3>
-                <p className="text-lg font-semibold">{completedTests}개</p>
-              </div>
-            </div>
-          </div>
-
-          {/* 내 검사 목록 */}
-          <div className="p-6 bg-white rounded-lg shadow-md">
-            <h2 className="mb-4 text-xl font-semibold text-gray-800">내 검사 목록</h2>
-            
-            {tests.length === 0 ? (
-              <div className="p-4 text-center text-gray-500 border rounded-md">
-                검사 내역이 없습니다.
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full mb-4 text-sm text-left text-gray-700">
-                  <thead className="text-xs text-gray-700 uppercase bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3">번호</th>
-                      <th className="px-6 py-3">검사명</th>
-                      <th className="px-6 py-3">시작일</th>
-                      <th className="px-6 py-3">종료일</th>
-                      <th className="px-6 py-3">상태</th>
-                      <th className="px-6 py-3">결과</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {tests.map((test) => (
-                      <tr key={test.cr_seq} className="bg-white border-b hover:bg-gray-50">
-                        <td className="px-6 py-4">{test.num}</td>
-                        <td className="px-6 py-4">{test.pd_name}</td>
-                        <td className="px-6 py-4">{test.startdate || '-'}</td>
-                        <td className="px-6 py-4">{test.enddate || '-'}</td>
-                        <td className="px-6 py-4">
-                          {test.done === 'R' ? (
-                            <span className="px-2 py-1 text-xs text-yellow-700 bg-yellow-100 rounded-full">진행중</span>
-                          ) : (
-                            <span className="px-2 py-1 text-xs text-green-700 bg-green-100 rounded-full">완료</span>
-                          )}
-                        </td>
-                        <td className="px-6 py-4">
-                          {test.rview === 'Y' || test.rview === 'P' ? (
-                            <button
-                              onClick={() => router.push(`/test-result/${test.cr_seq}`)}
-                              className="px-3 py-1 text-xs text-white bg-blue-500 rounded hover:bg-blue-600"
-                            >
-                              결과보기
-                            </button>
-                          ) : (
-                            <span className="text-gray-400">결과 없음</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-            
-            {error && (
-              <div className="p-4 mt-4 text-center text-red-500 border border-red-200 rounded-md">
-                테스트 결과를 가져오는데 실패했습니다
-              </div>
-            )}
+            <h1 className="mb-4 text-2xl font-bold text-gray-800">대시보드 리다이렉트 중...</h1>
+            <p className="text-gray-600">잠시만 기다려주세요. 적절한 대시보드로 이동합니다.</p>
           </div>
         </div>
       </main>
-      
-      {/* 하단 푸터 */}
       <Footer />
     </div>
   );
