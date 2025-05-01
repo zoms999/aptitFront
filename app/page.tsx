@@ -15,7 +15,7 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row justify-between items-center text-sm text-gray-600 dark:text-gray-400">
             <div className="mb-4 md:mb-0">
-              <span>© 2025 Aptit. All rights reserved.</span>
+              <span>© 2025 한국진로적성센터. All rights reserved.</span>
             </div>
             <div className="flex space-x-6">
               <a href="#" className="hover:text-indigo-600 dark:hover:text-indigo-400">이용약관</a>

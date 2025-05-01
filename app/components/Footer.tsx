@@ -65,10 +65,10 @@ export default function Footer() {
         {/* 하단 정보 */}
         <div className="mt-8 pt-6 border-t border-gray-700 text-center md:text-left">
           <p className="text-xs text-gray-400">
-            사업자등록번호: 000-00-00000 | 대표: 홍길동 | 주소: 서울특별시 강남구 테헤란로 123 APTIT 빌딩
+            사업자등록번호: 138-90-72168 | 대표이사 박에스더 외 1명 | 주소: 서울 강서구 마곡서로 152 두산더랜드타워 B동 4층
           </p>
           <p className="text-xs text-gray-400 mt-1">
-            전화번호: 02-123-4567 | 이메일: support@aptit.co.kr
+          ☏ 02-523-7523 | 이메일: support@aptit.co.kr
           </p>
         </div>
       </div>
