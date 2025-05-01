@@ -11,9 +11,9 @@ export default function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
           {/* 회사 정보 */}
           <div className="col-span-1 md:col-span-1">
-            <h2 className="text-lg font-semibold mb-4">APTIT</h2>
+            <h2 className="text-lg font-semibold mb-4">한국진로적성센터</h2>
             <p className="text-sm text-gray-300 mb-2">역량 & 적성검사 전문 플랫폼</p>
-            <p className="text-sm text-gray-300">© {currentYear} APTIT. All rights reserved.</p>
+            <p className="text-sm text-gray-300">© {currentYear} 한국진로적성센터. All rights reserved.</p>
           </div>
 
           {/* 서비스 링크 */}

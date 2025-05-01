@@ -7,8 +7,8 @@ import { ThemeProvider } from "../src/providers/ThemeProvider";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Aptit Front",
-  description: "Aptit Front Application",
+  title: "옥타그노시스",
+  description: "옥타그노시스 Front Application",
 };
 
 export default function RootLayout({

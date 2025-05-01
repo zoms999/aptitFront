@@ -12,7 +12,7 @@ export default function Header() {
         {/* 로고 */}
         <div className="flex items-center">
           <Link href="/" className="text-2xl font-bold text-blue-600">
-            APTIT
+          옥타그노시스
           </Link>
         </div>
 

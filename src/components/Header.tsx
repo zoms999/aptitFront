@@ -2,10 +2,16 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useSession, signOut } from "next-auth/react";
 import LanguageSelector from "./LanguageSelector";
 
 export default function Header() {
+  const { data: session, status } = useSession();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const handleSignOut = async () => {
+    await signOut({ redirect: true, callbackUrl: '/' });
+  };
 
   return (
     <header className="bg-gradient-to-r from-blue-500 to-indigo-600 shadow-md">
@@ -37,12 +43,29 @@ export default function Header() {
           
           <div className="hidden md:flex items-center space-x-4">
             <LanguageSelector />
-            <Link 
-              href="/login" 
-              className="text-white hover:text-indigo-100 transition-colors px-4 py-2 rounded-md bg-indigo-700 hover:bg-indigo-800"
-            >
-              로그인
-            </Link>
+            {status === 'authenticated' ? (
+              <div className="flex items-center space-x-4">
+                <Link 
+                  href="/dashboard" 
+                  className="text-white hover:text-indigo-100 transition-colors"
+                >
+                  {session.user?.name || '마이페이지'}
+                </Link>
+                <button 
+                  onClick={handleSignOut}
+                  className="text-white hover:text-indigo-100 transition-colors px-4 py-2 rounded-md bg-indigo-700 hover:bg-indigo-800"
+                >
+                  로그아웃
+                </button>
+              </div>
+            ) : (
+              <Link 
+                href="/login" 
+                className="text-white hover:text-indigo-100 transition-colors px-4 py-2 rounded-md bg-indigo-700 hover:bg-indigo-800"
+              >
+                로그인
+              </Link>
+            )}
           </div>
           
           {/* Mobile menu button */}
@@ -119,12 +142,29 @@ export default function Header() {
               >
                 고객센터
               </a>
-              <Link
-                href="/login"
-                className="text-white block px-3 py-2 rounded-md text-base font-medium bg-indigo-700 hover:bg-indigo-800"
-              >
-                로그인
-              </Link>
+              {status === 'authenticated' ? (
+                <>
+                  <Link
+                    href="/dashboard"
+                    className="text-white block px-3 py-2 rounded-md text-base font-medium hover:bg-indigo-700"
+                  >
+                    {session.user?.name || '마이페이지'}
+                  </Link>
+                  <button
+                    onClick={handleSignOut}
+                    className="w-full text-left text-white block px-3 py-2 rounded-md text-base font-medium bg-indigo-700 hover:bg-indigo-800"
+                  >
+                    로그아웃
+                  </button>
+                </>
+              ) : (
+                <Link
+                  href="/login"
+                  className="text-white block px-3 py-2 rounded-md text-base font-medium bg-indigo-700 hover:bg-indigo-800"
+                >
+                  로그인
+                </Link>
+              )}
             </div>
           </div>
         )}
