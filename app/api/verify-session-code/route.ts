@@ -12,24 +12,25 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // 회차코드 검증 쿼리 (예시)
+    // 회차코드 검증 쿼리
     const result = await db.$queryRaw<{ exists: boolean }[]>`
       SELECT EXISTS(
         SELECT 1 FROM mwd_institute_turn 
-        WHERE itu_code = ${code} 
-        AND itu_useyn = 'Y'
+        WHERE tur_code = ${code} 
+        AND tur_use = 'Y'
       ) as exists
     `;
     
     const isValid = result[0].exists;
     
     if (isValid) {
-      // 회차 정보 조회 (추가 정보가 필요한 경우)
-      const turnInfo = await db.$queryRaw<{ ins_seq: number, itu_seq: number, itu_title: string }[]>`
-        SELECT ins_seq, itu_seq, itu_title 
-        FROM mwd_institute_turn 
-        WHERE itu_code = ${code} 
-        AND itu_useyn = 'Y'
+      // 회차 정보 조회
+      const turnInfo = await db.$queryRaw<{ ins_seq: number, tur_seq: number, ins_name: string, tur_use: string }[]>`
+        SELECT ins.ins_name, tur.ins_seq, tur.tur_seq, tur.tur_use 
+        FROM mwd_institute ins, mwd_institute_turn tur
+        WHERE ins.ins_seq = tur.ins_seq
+        AND tur_code = ${code} 
+        AND tur_use = 'Y'
       `;
       
       if (turnInfo.length > 0) {
@@ -37,8 +38,9 @@ export async function POST(request: NextRequest) {
           valid: true, 
           message: '유효한 회차코드입니다.',
           instituteSeq: turnInfo[0].ins_seq,
-          turnSeq: turnInfo[0].itu_seq,
-          turnTitle: turnInfo[0].itu_title
+          turnSeq: turnInfo[0].tur_seq,
+          instituteName: turnInfo[0].ins_name,
+          turnUse: turnInfo[0].tur_use
         });
       }
     }
