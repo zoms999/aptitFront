@@ -54,7 +54,7 @@ interface DashboardData {
 }
 
 export default function OrganizationDashboard() {
-  const { data: session, status } = useSession();
+  const { status } = useSession();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
@@ -140,7 +140,7 @@ export default function OrganizationDashboard() {
     return null;
   }
 
-  const { accountStatus, tests, completedTests, instituteInfo, members } = dashboardData;
+  const { accountStatus, tests, instituteInfo, members } = dashboardData;
   
   // 계정 상태에 따른 표시 정보
   const isPaid = accountStatus.cr_pay === 'Y';
@@ -275,6 +275,8 @@ export default function OrganizationDashboard() {
                         <td className="px-4 py-3">{test.enddate || '-'}</td>
                         <td className="px-4 py-3">
                           {test.done === 'R' ? (
+                            <span className="px-2 py-1 text-xs text-gray-700 bg-gray-100 rounded-full">준비됨</span>
+                          ) : test.done === 'I' ? (
                             <span className="px-2 py-1 text-xs text-yellow-700 bg-yellow-100 rounded-full">진행중</span>
                           ) : (
                             <span className="px-2 py-1 text-xs text-green-700 bg-green-100 rounded-full">완료</span>
