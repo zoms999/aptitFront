@@ -24,8 +24,8 @@ interface GenderResult {
   pe_sex: string;
 }
 
-// 사용자 확장 타입
-interface CustomUser {
+// 사용자 타입 공통 정의
+type CommonUserFields = {
   id: string;
   name?: string | null;
   email?: string | null;
@@ -37,17 +37,22 @@ interface CustomUser {
   isExpired?: boolean;
   state?: string;
   sessionCode?: string;
-  ac_id?: string;
-}
+  ac_id: string;
+};
 
+// NextAuth 모듈 타입 확장
 declare module "next-auth" {
   interface Session {
-    user: CustomUser;
+    user: CommonUserFields;
+    error?: string;
   }
+  
+  interface User extends CommonUserFields {}
 }
 
+// JWT 모듈 타입 확장
 declare module "next-auth/jwt" {
-  interface JWT extends CustomUser {}
+  interface JWT extends CommonUserFields {}
 }
 
 // Auth 옵션 정의
@@ -86,8 +91,9 @@ const authOptions = {
 
             const acGid = accountResult[0].ac_gid;
             const peName = accountResult[0].pe_name;
+            const acId = accountResult[0].ac_id;
 
-            console.log('계정 정보 확인됨:', { acGid, peName });
+            console.log('계정 정보 확인됨:', { acGid, peName, acId });
 
             // 로그인 로그 기록
             try {
@@ -159,7 +165,7 @@ const authOptions = {
               productType: paymentResult.length > 0 ? paymentResult[0].pd_kind : "",
               isExpired: paymentResult.length > 0 ? paymentResult[0].expire === 'N' : true,
               state: paymentResult.length > 0 ? paymentResult[0].state : "R",
-              ac_id: accountResult[0].ac_id
+              ac_id: acId
             };
           } 
           // 기관 계정 로그인 (세션코드 필요)
@@ -204,8 +210,9 @@ const authOptions = {
 
             const acGid = accountResult[0].ac_gid;
             const peName = accountResult[0].pe_name;
+            const acId = accountResult[0].ac_id;
 
-            console.log('계정 정보 확인됨:', { acGid, peName });
+            console.log('계정 정보 확인됨:', { acGid, peName, acId });
 
             // 로그인 로그 기록
             try {
@@ -227,7 +234,7 @@ const authOptions = {
               name: peName,
               type: "organization",
               sessionCode: credentials.sessionCode,
-              ac_id: accountResult[0].ac_id
+              ac_id: acId
             };
           }
 
@@ -250,6 +257,12 @@ const authOptions = {
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
+        // 필수 필드 확인
+        if (!user.id || !user.ac_id) {
+          console.error('JWT 콜백: 필수 사용자 정보 누락', { id: user.id, ac_id: user.ac_id });
+          throw new Error('필수 사용자 정보가 누락되었습니다');
+        }
+        
         token.id = user.id;
         token.name = user.name;
         token.type = user.type;
@@ -276,20 +289,29 @@ const authOptions = {
       console.log('Session Token:', JSON.stringify(token, null, 2));
       console.log('Session Before:', JSON.stringify(session, null, 2));
       
-      if (token && session.user) {
-        session.user.id = token.id as string;
-        session.user.name = token.name as string;
-        session.user.type = token.type as string;
-        session.user.ac_id = token.ac_id as string;
+      // 필수 필드 확인
+      if (!token.id || !token.ac_id) {
+        console.error('세션 콜백: 필수 토큰 정보 누락', { id: token.id, ac_id: token.ac_id });
+        return {
+          ...session,
+          error: '세션 정보가 불완전합니다. 다시 로그인해 주세요.'
+        };
+      }
+      
+      if (session.user) {
+        session.user.id = token.id;
+        session.user.name = token.name;
+        session.user.type = token.type;
+        session.user.ac_id = token.ac_id;
         
         if (token.type === "personal") {
-          session.user.sex = token.sex as string;
-          session.user.isPaid = token.isPaid as boolean;
-          session.user.productType = token.productType as string;
-          session.user.isExpired = token.isExpired as boolean;
-          session.user.state = token.state as string;
+          session.user.sex = token.sex;
+          session.user.isPaid = token.isPaid;
+          session.user.productType = token.productType;
+          session.user.isExpired = token.isExpired;
+          session.user.state = token.state;
         } else if (token.type === "organization") {
-          session.user.sessionCode = token.sessionCode as string;
+          session.user.sessionCode = token.sessionCode;
         }
       }
       
@@ -303,4 +325,4 @@ const authOptions = {
 
 // NextAuth 핸들러 생성
 const handler = NextAuth(authOptions);
-export { handler as GET, handler as POST }; 
+export { handler as GET, handler as POST, authOptions }; 
