@@ -44,9 +44,34 @@ export async function POST(request: NextRequest) {
       agreeTerms,
       agreePrivacy,
       agreeMarketing,
-      instituteSeq,
-      turnSeq
+      instituteSeq: requestInstituteSeq,
+      turnSeq: requestTurnSeq
     } = await request.json();
+
+    // 쿠키에서 기관 정보 가져오기
+    const instituteSeqCookie = request.cookies.get('institute_seq');
+    const turnSeqCookie = request.cookies.get('turn_seq');
+    
+    // 요청 데이터와 쿠키 데이터 중 하나 선택
+    const instituteSeq = requestInstituteSeq || (instituteSeqCookie ? parseInt(instituteSeqCookie.value) : null);
+    const turnSeq = requestTurnSeq || (turnSeqCookie ? parseInt(turnSeqCookie.value) : null);
+    
+    // 모든 쿠키 로깅
+    const allCookies = request.cookies.getAll();
+    console.log('모든 쿠키:', allCookies.map(cookie => `${cookie.name}=${cookie.value}`));
+    
+    // 기관 정보 로깅
+    console.log('기관 정보:', { 
+      instituteSeq, 
+      turnSeq, 
+      requestInstituteSeq, 
+      requestTurnSeq,
+      instituteSeqCookie: instituteSeqCookie?.value,
+      turnSeqCookie: turnSeqCookie?.value,
+      headers: {
+        cookie: request.headers.get('cookie')
+      }
+    });
 
     // 필수 필드 검증
     const requiredFields = [
@@ -62,17 +87,53 @@ export async function POST(request: NextRequest) {
       { field: 'academicGroup', value: academicGroup, message: '학업군을 선택해주세요.' },
       { field: 'jobGroup', value: jobGroup, message: '직업군을 선택해주세요.' },
       { field: 'agreeTerms', value: agreeTerms, message: '이용약관에 동의해주세요.' },
-      { field: 'instituteSeq', value: instituteSeq, message: '기관 정보가 없습니다.' },
-      { field: 'turnSeq', value: turnSeq, message: '회차 정보가 없습니다.' }
+      { field: 'agreePrivacy', value: agreePrivacy, message: '개인정보 처리방침에 동의해주세요.' }
+      // instituteSeq와 turnSeq는 쿠키에서 가져올 수 있으므로 여기서 검증하지 않음
     ];
 
     for (const field of requiredFields) {
-      if (!field.value) {
+      // Boolean 타입 필드는 false 값이 유효한 값이므로 undefined/null만 체크
+      if (field.field === 'agreeTerms' || field.field === 'agreePrivacy' || field.field === 'agreeMarketing') {
+        if (field.value === undefined || field.value === null) {
+          return NextResponse.json(
+            { success: false, message: field.message },
+            { status: 400 }
+          );
+        }
+      } else if (!field.value && field.value !== 0) { // 0은 유효한 숫자 값이므로 허용
         return NextResponse.json(
           { success: false, message: field.message },
           { status: 400 }
         );
       }
+    }
+
+    // 기관 정보 검증
+    if (!instituteSeq || !turnSeq) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          message: '기관 정보가 없습니다. 회차코드를 다시 확인해주세요.',
+          instituteSeq,
+          turnSeq
+        },
+        { status: 400 }
+      );
+    }
+
+    // 약관 동의 여부 확인
+    if (!agreeTerms) {
+      return NextResponse.json(
+        { success: false, message: '이용약관에 동의해주세요.' },
+        { status: 400 }
+      );
+    }
+
+    if (!agreePrivacy) {
+      return NextResponse.json(
+        { success: false, message: '개인정보 처리방침에 동의해주세요.' },
+        { status: 400 }
+      );
     }
 
     // 문자열 필드 길이 검증 및 조정
@@ -93,6 +154,22 @@ export async function POST(request: NextRequest) {
       companyName: (companyName || '')?.substring(0, 50),
       jobDescription: (jobDescription || '')?.substring(0, 100)
     };
+
+    // 이메일 검증
+    if (!/\S+@\S+\.\S+/.test(email)) {
+      return NextResponse.json(
+        { success: false, message: '유효한 이메일 주소를 입력해주세요.' },
+        { status: 400 }
+      );
+    }
+
+    // 전화번호 검증
+    if (!/^\d+$/.test(phone)) {
+      return NextResponse.json(
+        { success: false, message: '휴대폰 번호는 숫자만 입력 가능합니다.' },
+        { status: 400 }
+      );
+    }
 
     console.log('1. 계정 사용 여부 조회 시작');
     // 1. 계정 사용 여부 조회
@@ -142,6 +219,7 @@ export async function POST(request: NextRequest) {
 
     console.log('2. 기관 및 차수 정보 확인 시작');
     // 2. 기관 정보 확인
+    console.log('기관 정보 확인 - 입력값:', { instituteSeq, turnSeq, 타입: typeof instituteSeq });
     try {
       const instituteResult = await db.$queryRaw<InstituteInfo[]>`
         SELECT ins_seq, tur_seq, tur_use, tur_req_sum, tur_use_sum
@@ -215,13 +293,13 @@ export async function POST(request: NextRequest) {
       
       const accountResult = await db.$queryRaw<{ac_gid: string}[]>`
         INSERT INTO mwd_account (
-          ac_id, ac_pw, ac_use, ac_insert_date, ac_leave_date, 
-          ac_gid, ins_seq, pe_seq, ac_expire_date,
+          ac_gid, ac_id, ac_pw, ac_expire_date, ac_insert_date, ac_leave_date, 
+          ac_use, ins_seq, pe_seq, 
           ac_terms_use, ac_terms_person, ac_terms_event
         ) VALUES (
-          ${username.toLowerCase()}, CRYPT(${password}, GEN_SALT('bf')), 'Y', 
-          now(), now(), (SELECT uuid_generate_v4()), 
-          ${instituteSeq}, ${peSeq}, (SELECT now() + interval '1 month'),
+          (SELECT uuid_generate_v4()), lower(${username}), CRYPT(${password}, GEN_SALT('bf')), 
+          (SELECT now() + interval '1 month'), now(), now(), 
+          'Y', ${instituteSeq}, ${peSeq}, 
           ${termsUse}, ${termsPerson}, ${termsEvent}
         ) RETURNING ac_gid
       `;
@@ -243,7 +321,7 @@ export async function POST(request: NextRequest) {
         INSERT INTO mwd_log_login_account (
           login_date, user_agent, ac_gid
         ) VALUES (
-          now(), ${userAgent || 'Unknown'}, ${acGid}
+          now(), ${JSON.stringify(userAgent || { ua: 'Unknown' })}::json, ${acGid}::uuid
         )
       `;
     } catch (error) {
@@ -258,7 +336,7 @@ export async function POST(request: NextRequest) {
         INSERT INTO mwd_log_account (
           action_date, action_type, action_reason, action_result, action_func, ac_gid, mg_seq
         ) VALUES (
-          now(), 'JOIN', '기관', 'SUCCESS', 'WEB', ${acGid}, -1
+          now(), 'I', '기관', 'true', '/account/insert', ${acGid}::uuid, -1
         )
       `;
     } catch (error) {
@@ -300,8 +378,8 @@ export async function POST(request: NextRequest) {
           ac_gid, cr_seq, cr_pay, cr_duty, cr_study, cr_subject, cr_image,
           pd_kind, pd_price, cr_paymentdate, pd_num, ins_seq, tur_seq
         ) VALUES (
-          ${acGid}, (SELECT NEXTVAL('cr_seq')), 'Y', 'Y', 'Y', 'Y', 'Y',
-          'premium', 0, now(), 'auto', ${instituteSeq}, ${turnSeq}
+          ${acGid}::uuid, (SELECT NEXTVAL('cr_seq')), 'Y', 'Y', 'Y', 'Y', 'Y',
+          'premium', 0, now(), 10010::int2, ${instituteSeq}, ${turnSeq}
         )
       `;
     } catch (error) {

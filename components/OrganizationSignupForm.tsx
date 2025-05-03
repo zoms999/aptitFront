@@ -202,9 +202,17 @@ const OrganizationSignupForm = () => {
         // 기관 및 차수 정보 저장
         setFormData(prev => ({
           ...prev,
-          instituteSeq: data.insSeq,
-          turnSeq: data.turSeq
+          instituteSeq: data.instituteSeq,
+          turnSeq: data.turnSeq
         }));
+        
+        // 기관 정보를 로컬 스토리지에도 저장 (세션 보완)
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('institute_seq', data.instituteSeq);
+          localStorage.setItem('turn_seq', data.turnSeq);
+          localStorage.setItem('institute_name', data.instituteName);
+        }
+        
         setErrors(prev => ({ ...prev, sessionCode: undefined }));
       } else {
         toast.error('소속기관을 확인할 수 없는 회차코드입니다', {
@@ -483,8 +491,8 @@ const OrganizationSignupForm = () => {
           agreeMarketing: formData.agreeMarketing,
           
           // 기관 정보
-          instituteSeq: formData.instituteSeq,
-          turnSeq: formData.turnSeq,
+          instituteSeq: formData.instituteSeq || localStorage.getItem('institute_seq'),
+          turnSeq: formData.turnSeq || localStorage.getItem('turn_seq'),
           
           // 유형
           type: 'organization'
@@ -508,14 +516,14 @@ const OrganizationSignupForm = () => {
           console.log('회원가입 성공:', data);
           
           // 성공 토스트 메시지 표시
-          toast.success('기관 회원가입이 완료되었습니다! 결제 페이지로 이동합니다.', {
+          toast.success('기관 회원가입이 완료되었습니다! 메인페이지로 이동합니다.', {
             position: "top-center",
             autoClose: 2000,
           });
           
-          // 잠시 후 결제 페이지로 이동
+          // 잠시 후 메인페이지로 이동
           setTimeout(() => {
-            router.push(`/payment?acGid=${data.acGid}`);
+            router.push('/');
           }, 2000);
         } else {
           // 에러 메시지 표시

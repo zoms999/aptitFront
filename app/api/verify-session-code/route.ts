@@ -34,7 +34,8 @@ export async function POST(request: NextRequest) {
       `;
       
       if (turnInfo.length > 0) {
-        return NextResponse.json({ 
+        // 응답 객체 생성
+        const response = NextResponse.json({ 
           valid: true, 
           message: '유효한 회차코드입니다.',
           instituteSeq: turnInfo[0].ins_seq,
@@ -42,6 +43,36 @@ export async function POST(request: NextRequest) {
           instituteName: turnInfo[0].ins_name,
           turnUse: turnInfo[0].tur_use
         });
+        
+        // 쿠키에 기관 정보 저장 (1시간 유효)
+        const maxAge = 60 * 60; // 1시간
+        const secure = process.env.NODE_ENV === 'production';
+        
+        response.cookies.set('institute_seq', String(turnInfo[0].ins_seq), { 
+          maxAge,
+          path: '/',
+          secure,
+          httpOnly: false,
+          sameSite: 'lax'
+        });
+        
+        response.cookies.set('turn_seq', String(turnInfo[0].tur_seq), { 
+          maxAge,
+          path: '/',
+          secure,
+          httpOnly: false,
+          sameSite: 'lax'
+        });
+        
+        response.cookies.set('institute_name', turnInfo[0].ins_name, { 
+          maxAge,
+          path: '/',
+          secure,
+          httpOnly: false,
+          sameSite: 'lax'
+        });
+        
+        return response;
       }
     }
     
