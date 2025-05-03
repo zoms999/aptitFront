@@ -461,6 +461,9 @@ const OrganizationSignupForm = () => {
           position: "top-center"
         });
         
+        // 사용자 에이전트 정보 가져오기
+        const userAgent = typeof window !== 'undefined' ? window.navigator.userAgent : 'Unknown';
+        
         // 전체 폼 데이터 준비
         const signupData = {
           // 개인 정보
@@ -493,6 +496,9 @@ const OrganizationSignupForm = () => {
           // 기관 정보
           instituteSeq: formData.instituteSeq || localStorage.getItem('institute_seq'),
           turnSeq: formData.turnSeq || localStorage.getItem('turn_seq'),
+          
+          // 브라우저 정보
+          userAgent: userAgent,
           
           // 유형
           type: 'organization'

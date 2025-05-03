@@ -195,7 +195,7 @@ export async function POST(request: NextRequest) {
         INSERT INTO mwd_log_login_account (
           login_date, user_agent, ac_gid
         ) VALUES (
-          now(), ${userAgent || 'Unknown'}, ${acGid}
+          now(), ${JSON.stringify(userAgent || 'Unknown')}::json, ${acGid}::uuid
         )
       `;
     } catch (error) {
@@ -210,7 +210,7 @@ export async function POST(request: NextRequest) {
         INSERT INTO mwd_log_account (
           action_date, action_type, action_reason, action_result, action_func, ac_gid, mg_seq
         ) VALUES (
-          now(), 'JOIN', '개인', 'SUCCESS', 'WEB', ${acGid}, -1
+          now(), 'J', '개인', 'true', '/account/insert', ${acGid}::uuid, -1
         )
       `;
     } catch (error) {
@@ -221,15 +221,42 @@ export async function POST(request: NextRequest) {
     console.log('6. 선택 결과 저장 시작');
     // 6. 선택 결과 저장
     try {
-      await db.$queryRaw`
-        INSERT INTO mwd_choice_result (
-          ac_gid, cr_seq, cr_pay, cr_duty, cr_study, cr_subject, cr_image,
-          pd_kind, pd_price, cr_paymentdate, pd_num
-        ) VALUES (
-          ${acGid}, (SELECT NEXTVAL('cr_seq')), 'N', 'Y', 'Y', 'Y', 'Y',
-          'basic', 0, now(), 'auto'
-        )
+      // 먼저 제품 번호가 있는지 확인
+      const products = await db.$queryRaw<{pd_num: number}[]>`
+        SELECT pd_num FROM mwd_product WHERE pd_num = 0
       `;
+      
+      if (products && products.length > 0) {
+        await db.$queryRaw`
+          INSERT INTO mwd_choice_result (
+            ac_gid, cr_seq, cr_pay, cr_duty, cr_study, cr_subject, cr_image,
+            pd_kind, pd_price, cr_paymentdate, pd_num
+          ) VALUES (
+            ${acGid}::uuid, (SELECT NEXTVAL('cr_seq')), 'N', 'Y', 'Y', 'Y', 'Y',
+            'basic', 0, now(), 0
+          )
+        `;
+      } else {
+        // 기본 제품 번호 찾기
+        const defaultProducts = await db.$queryRaw<{pd_num: number}[]>`
+          SELECT pd_num FROM mwd_product ORDER BY pd_num LIMIT 1
+        `;
+        
+        if (defaultProducts && defaultProducts.length > 0) {
+          const defaultPdNum = defaultProducts[0].pd_num;
+          await db.$queryRaw`
+            INSERT INTO mwd_choice_result (
+              ac_gid, cr_seq, cr_pay, cr_duty, cr_study, cr_subject, cr_image,
+              pd_kind, pd_price, cr_paymentdate, pd_num
+            ) VALUES (
+              ${acGid}::uuid, (SELECT NEXTVAL('cr_seq')), 'N', 'Y', 'Y', 'Y', 'Y',
+              'basic', 0, now(), ${defaultPdNum}::int2
+            )
+          `;
+        } else {
+          throw new Error('사용 가능한 제품이 없습니다. 관리자에게 문의하세요.');
+        }
+      }
     } catch (error) {
       console.error('선택 결과 저장 오류:', error);
       throw new Error(`선택 결과 저장 오류: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
