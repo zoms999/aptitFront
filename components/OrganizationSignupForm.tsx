@@ -628,6 +628,59 @@ const OrganizationSignupForm = () => {
     return Object.keys(newErrors).length === 0;
   };
 
+  // 테스트 데이터 로드 함수
+  const loadTestData = () => {
+    const testData = {
+      username: 'testorg',
+      password: 'test123',
+      confirmPassword: 'test123',
+      name: '테스트 기관사용자',
+      gender: 'male',
+      birthdate: '1990-01-01',
+      phone: '01012345678',
+      additionalPhone: '01087654321',
+      email: 'testorg@example.com',
+      zipcode: '06141',
+      roadAddress: '서울특별시 강남구 테헤란로 123',
+      jibunAddress: '서울특별시 강남구 역삼동 123-45',
+      detailAddress: '테스트 빌딩 101호',
+      additionalAddress: '(역삼동)',
+      academicGroup: 'URE0012',
+      schoolName: '테스트대학교',
+      major: '컴퓨터공학',
+      grade: '4학년',
+      jobGroup: 'URJ0002',
+      companyName: '테스트 기관',
+      jobDescription: '기관 관리자',
+      agreeTerms: true,
+      agreePrivacy: true,
+      agreeMarketing: true,
+      sessionCode: '12345678', // 기관코드 (실제 사용 시 유효한 코드로 변경 필요)
+      instituteSeq: '1',  // 기관 시퀀스 
+      turnSeq: '1'  // 차수 시퀀스
+    };
+    
+    setFormData(testData);
+    
+    // 유효성 검사 통과 플래그 설정
+    setUsernameChecked(true);
+    setUsernameCheckMessage('사용 가능한 아이디입니다.');
+    setCodeVerified(true);
+    setCodeCheckMessage('테스트 기관 - 유효한 회차코드입니다.');
+    
+    // 기관 정보 로컬 스토리지에 저장
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('institute_seq', testData.instituteSeq);
+      localStorage.setItem('turn_seq', testData.turnSeq);
+      localStorage.setItem('institute_name', '테스트 기관');
+    }
+    
+    toast.success('테스트 데이터가 로드되었습니다! 이제 다음 단계로 이동하세요.', {
+      position: "top-center",
+      autoClose: 2000,
+    });
+  };
+
   return (
     <>
       <ToastContainer
@@ -647,6 +700,17 @@ const OrganizationSignupForm = () => {
           fontSize: '14px'
         }}
       />
+      
+      {/* 테스트 데이터 로드 버튼 */}
+      <div className="mb-6 flex justify-end">
+        <button
+          type="button"
+          onClick={loadTestData}
+          className="py-2 px-4 bg-green-600 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-75"
+        >
+          테스트 데이터 로드
+        </button>
+      </div>
 
       <ProgressBar />
       

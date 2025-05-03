@@ -32,6 +32,40 @@ const PersonalSignupForm: React.FC = () => {
     agreeMarketing: false,
   });
 
+  // 테스트 데이터 로드 함수
+  const loadTestData = () => {
+    setFormData({
+      email: 'test@example.com',
+      name: '테스트 사용자',
+      birthdate: '1990-01-01',
+      gender: 'male',
+      phone: '01012345678',
+      additionalPhone: '01087654321',
+      zipcode: '06141',
+      roadAddress: '서울특별시 강남구 테헤란로 123',
+      jibunAddress: '서울특별시 강남구 역삼동 123-45',
+      detailAddress: '테스트 빌딩 101호',
+      additionalAddress: '(역삼동)',
+      academicGroup: 'URE0012',
+      schoolName: '테스트대학교',
+      major: '컴퓨터공학',
+      grade: '4학년',
+      jobGroup: 'URJ0002',
+      companyName: '테스트 주식회사',
+      jobDescription: '웹 개발자',
+      username: 'testuser',
+      password: 'test123',
+      agreeTerms: true,
+      agreePrivacy: true,
+      agreeMarketing: true,
+    });
+    
+    toast.success('테스트 데이터가 로드되었습니다!', {
+      position: "top-center",
+      autoClose: 2000,
+    });
+  };
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
     const checked = type === 'checkbox' ? (e.target as HTMLInputElement).checked : undefined;
@@ -153,6 +187,18 @@ const PersonalSignupForm: React.FC = () => {
         pauseOnHover
         theme="light"
       />
+      
+      {/* 테스트 데이터 로드 버튼 */}
+      <div className="mb-6 flex justify-end">
+        <button
+          type="button"
+          onClick={loadTestData}
+          className="py-2 px-4 bg-green-600 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-75"
+        >
+          테스트 데이터 로드
+        </button>
+      </div>
+      
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* 기본 회원정보 입력 필드 */}
         <div>
@@ -207,6 +253,61 @@ const PersonalSignupForm: React.FC = () => {
           />
         </div>
         
+        <div>
+          <label htmlFor="birthdate" className="block text-sm font-medium text-gray-700">생년월일</label>
+          <input
+            type="date"
+            id="birthdate"
+            name="birthdate"
+            value={formData.birthdate}
+            onChange={handleChange}
+            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+            required
+          />
+        </div>
+        
+        <div>
+          <label className="block text-sm font-medium text-gray-700">성별</label>
+          <div className="mt-1 flex space-x-4">
+            <label className="inline-flex items-center">
+              <input
+                type="radio"
+                name="gender"
+                value="male"
+                checked={formData.gender === 'male'}
+                onChange={handleChange}
+                className="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500"
+              />
+              <span className="ml-2 text-gray-700">남성</span>
+            </label>
+            <label className="inline-flex items-center">
+              <input
+                type="radio"
+                name="gender"
+                value="female"
+                checked={formData.gender === 'female'}
+                onChange={handleChange}
+                className="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500"
+              />
+              <span className="ml-2 text-gray-700">여성</span>
+            </label>
+          </div>
+        </div>
+        
+        <div>
+          <label htmlFor="phone" className="block text-sm font-medium text-gray-700">휴대전화</label>
+          <input
+            type="tel"
+            id="phone"
+            name="phone"
+            value={formData.phone}
+            onChange={handleChange}
+            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+            placeholder="'-' 없이 숫자만 입력"
+            required
+          />
+        </div>
+        
         {/* 약관 동의 체크박스 */}
         <div>
           <div className="flex items-center">
@@ -221,6 +322,23 @@ const PersonalSignupForm: React.FC = () => {
             />
             <label htmlFor="agreeTerms" className="ml-2 block text-sm text-gray-900">
               이용약관에 동의합니다
+            </label>
+          </div>
+        </div>
+        
+        <div>
+          <div className="flex items-center">
+            <input
+              type="checkbox"
+              id="agreePrivacy"
+              name="agreePrivacy"
+              checked={formData.agreePrivacy}
+              onChange={handleChange}
+              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+              required
+            />
+            <label htmlFor="agreePrivacy" className="ml-2 block text-sm text-gray-900">
+              개인정보 처리방침에 동의합니다
             </label>
           </div>
         </div>

@@ -1,7 +1,36 @@
+"use client";
+
 import LoginForm from "@/components/LoginForm";
 import Header from "@/components/Header";
+import { useSession } from "next-auth/react";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 
 export default function Home() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+  
+  useEffect(() => {
+    if (status === "authenticated" && session) {
+      // 이미 로그인된 사용자는 대시보드로 리다이렉트
+      router.push("/dashboard");
+    }
+  }, [session, status, router]);
+
+  // 로딩 중이거나 인증되지 않은 경우에만 로그인 화면 표시
+  if (status === "loading") {
+    return (
+      <div className="flex flex-col min-h-screen">
+        <Header />
+        <main className="flex-grow flex flex-col items-center justify-center py-24 px-4 sm:px-6 lg:px-8 bg-gray-50 dark:bg-gray-900">
+          <div className="w-full max-w-md space-y-8">
+            <p className="text-center text-gray-600 dark:text-gray-400">로딩 중...</p>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col min-h-screen">
       <Header />

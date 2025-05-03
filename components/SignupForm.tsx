@@ -82,6 +82,43 @@ const SignupForm = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
 
+  // 테스트 데이터 로드 함수
+  const loadTestData = () => {
+    const testData = {
+      username: 'testuser',
+      password: 'test123',
+      confirmPassword: 'test123',
+      name: '테스트 사용자',
+      gender: 'male',
+      birthdate: '1990-01-01',
+      phone: '01012345678',
+      additionalPhone: '01087654321',
+      email: 'test@example.com',
+      zipcode: '06141',
+      roadAddress: '서울특별시 강남구 테헤란로 123',
+      jibunAddress: '서울특별시 강남구 역삼동 123-45',
+      detailAddress: '테스트 빌딩 101호',
+      additionalAddress: '(역삼동)',
+      academicGroup: 'URE0012',
+      schoolName: '테스트대학교',
+      major: '컴퓨터공학',
+      grade: '4학년',
+      jobGroup: 'URJ0002',
+      companyName: '테스트 회사',
+      jobDescription: '웹 개발자',
+      agreeTerms: true
+    };
+    
+    setFormData(testData);
+    setUsernameChecked(true);
+    setUsernameCheckMessage('사용 가능한 아이디입니다.');
+    
+    toast.success('테스트 데이터가 로드되었습니다! 이제 다음 단계로 이동하세요.', {
+      position: "top-center",
+      autoClose: 2000,
+    });
+  };
+
   // 카카오 주소 검색 완료 핸들러
   const handlePostcodeComplete = (data: { zonecode: string; roadAddress: string; jibunAddress?: string; autoJibunAddress?: string }) => {
     setFormData(prev => ({
@@ -303,14 +340,14 @@ const SignupForm = () => {
           console.log('회원가입 성공:', data);
           
           // 성공 토스트 메시지 표시
-          toast.success('회원가입이 완료되었습니다! 결제 페이지로 이동합니다.', {
+          toast.success('회원가입이 완료되었습니다! 메인페이지로 이동합니다.', {
             position: "top-center",
             autoClose: 2000,
           });
           
-          // 잠시 후 결제 페이지로 이동
+          // 잠시 후 메인페이지로 이동
           setTimeout(() => {
-            router.push(`/payment?acGid=${data.acGid}`);
+            window.location.href = '/';
           }, 2000);
         } else {
           // 에러 메시지 표시
@@ -496,6 +533,17 @@ const SignupForm = () => {
           fontSize: '14px'
         }}
       />
+
+      {/* 테스트 데이터 로드 버튼 */}
+      <div className="mb-6 flex justify-end">
+        <button
+          type="button"
+          onClick={loadTestData}
+          className="py-2 px-4 bg-green-600 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-75"
+        >
+          테스트 데이터 로드
+        </button>
+      </div>
 
       <ProgressBar />
       
