@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import DaumPostcode from 'react-daum-postcode';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -62,7 +61,6 @@ interface Group {
 }
 
 const OrganizationSignupForm = () => {
-  const router = useRouter();
   const [formData, setFormData] = useState<FormData>({
     username: '',
     password: '',
@@ -101,6 +99,7 @@ const OrganizationSignupForm = () => {
   const [currentStep, setCurrentStep] = useState(1);
   const [codeVerified, setCodeVerified] = useState(false);
   const [codeCheckMessage, setCodeCheckMessage] = useState('');
+  const [isButtonClicked, setIsButtonClicked] = useState(false);
 
   // 데이터 목록
   const academicGroups: Group[] = [
@@ -436,9 +435,45 @@ const OrganizationSignupForm = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  // Enter 키 입력 시 폼 자동 제출 방지
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (currentStep < 5) {
+        toast.info('각 단계별로 다음 버튼을 클릭하여 진행해주세요', {
+          position: "top-center",
+          autoClose: 2000,
+        });
+      } else {
+        toast.info('가입하기 버튼을 클릭하여 가입을 진행해주세요', {
+          position: "top-center",
+          autoClose: 2000,
+        });
+      }
+    }
+  };
+
   // 폼 제출 핸들러
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // 현재 단계가 마지막 단계(5)인지 확인
+    if (currentStep !== 5) {
+      toast.error('모든 단계를 완료 후 가입하기 버튼을 클릭해주세요', {
+        position: "top-center",
+        autoClose: 3000,
+      });
+      return;
+    }
+    
+    // 버튼을 클릭하지 않은 경우 폼 제출 방지
+    if (!isButtonClicked) {
+      toast.error('가입하기 버튼을 클릭하여 가입을 진행해주세요', {
+        position: "top-center",
+        autoClose: 3000,
+      });
+      return;
+    }
     
     if (!formData.agreeTerms || !formData.agreePrivacy) {
       toast.error('필수 약관에 동의해주세요', {
@@ -529,7 +564,7 @@ const OrganizationSignupForm = () => {
           
           // 잠시 후 메인페이지로 이동
           setTimeout(() => {
-            router.push('/');
+            window.location.href = '/';
           }, 2000);
         } else {
           // 에러 메시지 표시
@@ -553,6 +588,7 @@ const OrganizationSignupForm = () => {
         });
       } finally {
         setIsSubmitting(false);
+        setIsButtonClicked(false);
       }
     } else {
       // 유효성 검사 실패 시 토스트 메시지
@@ -714,7 +750,7 @@ const OrganizationSignupForm = () => {
 
       <ProgressBar />
       
-      <form className="space-y-8" onSubmit={handleSubmit}>
+      <form className="space-y-8" onSubmit={handleSubmit} onKeyDown={handleKeyDown}>
         {/* 단계 1: 기관 확인 */}
         {currentStep === 1 && (
           <div className="space-y-6">
@@ -1304,6 +1340,7 @@ const OrganizationSignupForm = () => {
             <button
               type="submit"
               disabled={isSubmitting}
+              onClick={() => setIsButtonClicked(true)}
               className="ml-auto py-3 px-6 border border-transparent rounded-md shadow-sm text-base font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
             >
               {isSubmitting ? '처리중...' : '가입하기'}

@@ -1,11 +1,10 @@
 import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
 const PersonalSignupForm: React.FC = () => {
-  const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isButtonClicked, setIsButtonClicked] = useState(false);
   const [formData, setFormData] = useState({
     email: '',
     name: '',
@@ -60,7 +59,7 @@ const PersonalSignupForm: React.FC = () => {
       agreeMarketing: true,
     });
     
-    toast.success('테스트 데이터가 로드되었습니다!', {
+    toast.info('테스트 데이터가 로드되었습니다. 가입하기 버튼을 클릭하세요.', {
       position: "top-center",
       autoClose: 2000,
     });
@@ -78,6 +77,16 @@ const PersonalSignupForm: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // 버튼을 클릭하지 않은 경우 폼 제출 방지
+    if (!isButtonClicked) {
+      toast.error('가입하기 버튼을 클릭하여 가입을 진행해주세요', {
+        position: "top-center",
+        autoClose: 3000,
+      });
+      return;
+    }
+    
     try {
       setIsSubmitting(true);
       // 로딩 토스트 표시
@@ -148,12 +157,9 @@ const PersonalSignupForm: React.FC = () => {
         });
         
         // 즉시 메인페이지로 이동 (payment 페이지로 리다이렉션 방지)
-        window.location.href = '/';
-        
-        // 만약 위 코드가 즉시 실행되지 않을 경우를 대비해 setTimeout으로 백업
         setTimeout(() => {
-          router.push('/');
-        }, 100);
+          window.location.href = '/';
+        }, 2000);
       } else {
         // 실패 처리
         console.error('회원가입 실패:', data);
@@ -170,6 +176,18 @@ const PersonalSignupForm: React.FC = () => {
       });
     } finally {
       setIsSubmitting(false);
+      setIsButtonClicked(false);
+    }
+  };
+
+  // Enter 키 입력 시 폼 자동 제출 방지
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      toast.info('가입하기 버튼을 클릭하여 가입을 진행해주세요', {
+        position: "top-center",
+        autoClose: 2000,
+      });
     }
   };
 
@@ -199,7 +217,7 @@ const PersonalSignupForm: React.FC = () => {
         </button>
       </div>
       
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit} onKeyDown={handleKeyDown} className="space-y-6">
         {/* 기본 회원정보 입력 필드 */}
         <div>
           <label htmlFor="username" className="block text-sm font-medium text-gray-700">아이디</label>
@@ -346,6 +364,7 @@ const PersonalSignupForm: React.FC = () => {
         <button 
           type="submit" 
           disabled={isSubmitting}
+          onClick={() => setIsButtonClicked(true)}
           className="w-full py-2 px-4 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-75 disabled:opacity-50"
         >
           {isSubmitting ? '처리 중...' : '회원가입'}
