@@ -15,7 +15,10 @@ declare module "next-auth" {
       state?: string;
       // 기관 사용자 추가 필드
       sessionCode?: string;
+      // 계정 ID
+      ac_id: string;
     };
+    error?: string;
   }
   
   interface User {
@@ -32,6 +35,8 @@ declare module "next-auth" {
     state?: string;
     // 기관 사용자 추가 필드
     sessionCode?: string;
+    // 계정 ID
+    ac_id: string;
   }
 }
 
@@ -48,5 +53,7 @@ declare module "next-auth/jwt" {
     state?: string;
     // 기관 사용자 추가 필드
     sessionCode?: string;
+    // 계정 ID
+    ac_id: string;
   }
 } 

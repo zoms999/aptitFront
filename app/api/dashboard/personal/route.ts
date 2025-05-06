@@ -1,20 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
-import { db } from '../../../../lib/db/prisma';
-import { authOptions } from '../../auth/[...nextauth]/route';
-
-// 세션 타입 확장
-declare module "next-auth" {
-  interface Session {
-    user: {
-      id?: string;
-      name?: string | null;
-      email?: string | null;
-      image?: string | null;
-      ac_id?: string;
-    }
-  }
-}
+import prisma from '../../../../lib/db';
+import { authOptions } from '../../../../lib/auth';
 
 export async function GET() {
   try {
@@ -32,7 +19,7 @@ export async function GET() {
     
     // session.user에서 사용자 정보 확인
     console.log('일반회원 대시보드 - 사용자 상세 정보:', JSON.stringify(session.user, null, 2));
-    const userAny = session.user;
+    const userAny = session.user as any;
     
     // 세션에 필수 필드 검증
     if (userAny.id && userAny.ac_id) {
@@ -41,7 +28,7 @@ export async function GET() {
       
       // 일반 회원 여부 검증
       try {
-        const validateResult = await db.$queryRaw`
+        const validateResult = await prisma.$queryRaw`
           SELECT ins_seq FROM mwd_account 
           WHERE ac_gid = ${ac_gid}::uuid
           AND ac_use = 'Y'
@@ -73,7 +60,7 @@ export async function GET() {
     // 사용자 데이터 조회
     try {
       // 1. 계정 상태 조회
-      const accountStatusResult = await db.$queryRaw`
+      const accountStatusResult = await prisma.$queryRaw`
         SELECT cr_pay, pd_kind, expire, state 
         FROM (
           SELECT ac.ac_gid, 
@@ -96,7 +83,7 @@ export async function GET() {
       `;
       
       // 2. 검사 목록 조회
-      const testsResult = await db.$queryRaw`
+      const testsResult = await prisma.$queryRaw`
         SELECT row_number() OVER (ORDER BY cr.cr_seq DESC) AS num, 
               cr.cr_seq, 
               cr.cr_pay, 
@@ -124,7 +111,7 @@ export async function GET() {
       `;
       
       // 3. 사용자 정보 조회
-      const userInfoResult = await db.$queryRaw`
+      const userInfoResult = await prisma.$queryRaw`
         SELECT pe.pe_name, pe.pe_sex, pe.pe_email, pe.pe_cellphone,
               pe.pe_birth_year, pe.pe_birth_month, pe.pe_birth_day
         FROM mwd_account ac

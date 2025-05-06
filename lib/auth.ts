@@ -1,6 +1,5 @@
-import NextAuth from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-import { db } from "./db/prisma";
+import prisma from "./db";
 
 // 계정 결과 타입 정의
 interface AccountResult {
@@ -8,6 +7,7 @@ interface AccountResult {
   pe_name: string;
   ac_gid: string;
   ac_use: string;
+  ac_id: string;
 }
 
 // 결제 상태 결과 타입 정의
@@ -23,12 +23,8 @@ interface GenderResult {
   pe_sex: string;
 }
 
-export const {
-  handlers: { GET, POST },
-  auth,
-  signIn,
-  signOut,
-} = NextAuth({
+// Auth 옵션 정의
+export const authOptions = {
   debug: process.env.NODE_ENV === 'development',
   providers: [
     CredentialsProvider({
@@ -48,8 +44,8 @@ export const {
           // 개인 계정 로그인
           if (credentials.loginType === "personal") {
             // 사용자 계정 정보 조회
-            const accountResult = await db.$queryRaw<AccountResult[]>`
-              SELECT pe.pe_seq, pe.pe_name, ac.ac_gid, ac.ac_use 
+            const accountResult = await prisma.$queryRaw<AccountResult[]>`
+              SELECT pe.pe_seq, pe.pe_name, ac.ac_gid, ac.ac_use, ac.ac_id
               FROM mwd_person pe, mwd_account ac 
               WHERE ac.pe_seq = pe.pe_seq 
                 AND ac.ac_id = lower(${credentials.username}) 
@@ -63,15 +59,16 @@ export const {
 
             const acGid = accountResult[0].ac_gid;
             const peName = accountResult[0].pe_name;
+            const acId = accountResult[0].ac_id;
 
-            console.log('계정 정보 확인됨:', { acGid, peName });
+            console.log('계정 정보 확인됨:', { acGid, peName, acId });
 
             // 로그인 로그 기록
             try {
               // user_agent JSON 형식으로 변환
               const userAgentJson = JSON.stringify({ source: 'Web Login' });
               
-              await db.$queryRaw`
+              await prisma.$queryRaw`
                 INSERT INTO mwd_log_login_account (login_date, user_agent, ac_gid) 
                 VALUES (now(), ${userAgentJson}::json, ${acGid}::uuid)
               `;
@@ -84,7 +81,7 @@ export const {
             // 사용자 결제 상태 확인
             let paymentResult: PaymentResult[] = [];
             try {
-              paymentResult = await db.$queryRaw<PaymentResult[]>`
+              paymentResult = await prisma.$queryRaw<PaymentResult[]>`
                 SELECT cr_pay, pd_kind, expire, state 
                 FROM (
                     SELECT ac.ac_gid, 
@@ -114,7 +111,7 @@ export const {
             // 성별 정보 조회
             let genderResult: GenderResult[] = [];
             try {
-              genderResult = await db.$queryRaw<GenderResult[]>`
+              genderResult = await prisma.$queryRaw<GenderResult[]>`
                 SELECT pe.pe_sex 
                 FROM mwd_account ac, mwd_person pe 
                 WHERE ac.ac_gid = ${acGid}::uuid
@@ -135,7 +132,8 @@ export const {
               isPaid: paymentResult.length > 0 ? paymentResult[0].cr_pay === 'Y' : false,
               productType: paymentResult.length > 0 ? paymentResult[0].pd_kind : "",
               isExpired: paymentResult.length > 0 ? paymentResult[0].expire === 'N' : true,
-              state: paymentResult.length > 0 ? paymentResult[0].state : "R"
+              state: paymentResult.length > 0 ? paymentResult[0].state : "R",
+              ac_id: acId
             };
           } 
           // 기관 계정 로그인 (세션코드 필요)
@@ -165,8 +163,8 @@ export const {
             }
 
             // 사용자 계정 정보 조회
-            const accountResult = await db.$queryRaw<AccountResult[]>`
-              SELECT pe.pe_seq, pe.pe_name, ac.ac_gid, ac.ac_use 
+            const accountResult = await prisma.$queryRaw<AccountResult[]>`
+              SELECT pe.pe_seq, pe.pe_name, ac.ac_gid, ac.ac_use, ac.ac_id
               FROM mwd_person pe, mwd_account ac 
               WHERE ac.pe_seq = pe.pe_seq 
                 AND ac.ac_id = lower(${credentials.username}) 
@@ -180,15 +178,16 @@ export const {
 
             const acGid = accountResult[0].ac_gid;
             const peName = accountResult[0].pe_name;
+            const acId = accountResult[0].ac_id;
 
-            console.log('계정 정보 확인됨:', { acGid, peName });
+            console.log('계정 정보 확인됨:', { acGid, peName, acId });
 
             // 로그인 로그 기록
             try {
               // user_agent JSON 형식으로 변환
               const userAgentJson = JSON.stringify({ source: 'Web Login (Organization)' });
               
-              await db.$queryRaw`
+              await prisma.$queryRaw`
                 INSERT INTO mwd_log_login_account (login_date, user_agent, ac_gid) 
                 VALUES (now(), ${userAgentJson}::json, ${acGid}::uuid)
               `;
@@ -202,7 +201,8 @@ export const {
               id: acGid,
               name: peName,
               type: "organization",
-              sessionCode: credentials.sessionCode
+              sessionCode: credentials.sessionCode,
+              ac_id: acId
             };
           }
 
@@ -219,45 +219,74 @@ export const {
     error: "/login?error=true"
   },
   session: {
-    strategy: "jwt",
+    strategy: "jwt" as const,
     maxAge: 30 * 24 * 60 * 60, // 30일
   },
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user }: { token: any, user: any }) {
       if (user) {
+        // 필수 필드 확인
+        if (!user.id || !(user as any).ac_id) {
+          console.error('JWT 콜백: 필수 사용자 정보 누락', { id: user.id, ac_id: (user as any).ac_id });
+          throw new Error('필수 사용자 정보가 누락되었습니다');
+        }
+        
         token.id = user.id;
         token.name = user.name;
-        token.type = user.type;
+        token.type = (user as any).type;
+        token.ac_id = (user as any).ac_id;
         
-        if (user.type === "personal") {
-          token.sex = user.sex;
-          token.isPaid = user.isPaid;
-          token.productType = user.productType;
-          token.isExpired = user.isExpired;
-          token.state = user.state;
-        } else if (user.type === "organization") {
-          token.sessionCode = user.sessionCode;
+        // 디버깅을 위한 로그 추가
+        console.log('JWT User:', JSON.stringify(user, null, 2));
+        console.log('JWT Token after update:', JSON.stringify(token, null, 2));
+        
+        if ((user as any).type === "personal") {
+          token.sex = (user as any).sex;
+          token.isPaid = (user as any).isPaid;
+          token.productType = (user as any).productType;
+          token.isExpired = (user as any).isExpired;
+          token.state = (user as any).state;
+        } else if ((user as any).type === "organization") {
+          token.sessionCode = (user as any).sessionCode;
         }
       }
       return token;
     },
-    async session({ session, token }) {
-      if (token && session.user) {
-        session.user.id = token.id as string;
-        session.user.name = token.name as string;
-        session.user.type = token.type as string;
+    async session({ session, token }: { session: any, token: any }) {
+      // 디버깅을 위한 로그 추가
+      console.log('Session Token:', JSON.stringify(token, null, 2));
+      console.log('Session Before:', JSON.stringify(session, null, 2));
+      
+      // 필수 필드 확인
+      if (!token.id || !(token as any).ac_id) {
+        console.error('세션 콜백: 필수 토큰 정보 누락', { id: token.id, ac_id: (token as any).ac_id });
+        return {
+          ...session,
+          error: '세션 정보가 불완전합니다. 다시 로그인해 주세요.'
+        };
+      }
+      
+      if (session.user) {
+        session.user.id = token.id;
+        session.user.name = token.name;
+        session.user.type = (token as any).type;
+        session.user.ac_id = (token as any).ac_id;
         
-        if (token.type === "personal") {
-          session.user.sex = token.sex as string;
-          session.user.isPaid = token.isPaid as boolean;
-          session.user.productType = token.productType as string;
-          session.user.isExpired = token.isExpired as boolean;
-          session.user.state = token.state as string;
-        } else if (token.type === "organization") {
-          session.user.sessionCode = token.sessionCode as string;
+        if ((token as any).type === "personal") {
+          session.user.sex = (token as any).sex;
+          session.user.isPaid = (token as any).isPaid;
+          session.user.productType = (token as any).productType;
+          session.user.isExpired = (token as any).isExpired;
+          session.user.state = (token as any).state;
+        } else if ((token as any).type === "organization") {
+          session.user.sessionCode = (token as any).sessionCode;
         }
       }
+      
+      // 디버깅을 위한 로그 추가
+      console.log('Session After:', JSON.stringify(session, null, 2));
+      
       return session;
     },
   },
-}); 
+}; 

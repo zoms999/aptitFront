@@ -1,93 +1,61 @@
 "use client";
 
-import { useEffect } from 'react';
+import React, { Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { toast, ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
+import Link from 'next/link';
 
-export default function PaymentFailPage() {
-  const router = useRouter();
+// 실제 컴포넌트 내용
+function PaymentFailContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   
-  // 토스페이먼츠 결제 실패 코드 및 메시지
-  const code = searchParams.get('code') || '알 수 없는 오류 코드';
-  const message = searchParams.get('message') || '결제 중 오류가 발생했습니다.';
-  const orderId = searchParams.get('orderId') || '';
-
-  useEffect(() => {
-    // 실패 로그 저장
-    const logPaymentFailure = async () => {
-      try {
-        await fetch('/api/payment/fail', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            code,
-            message,
-            orderId
-          }),
-        });
-      } catch (err) {
-        console.error('결제 실패 로그 저장 오류:', err);
-      }
-    };
-
-    logPaymentFailure();
-    
-    // 결제 실패 알림
-    toast.error('결제에 실패했습니다.', {
-      position: "top-center",
-      autoClose: 3000,
-    });
-  }, [code, message, orderId]);
-
-  // 결제 페이지로 돌아가기
-  const goBackToPayment = () => {
-    router.push('/payment');
-  };
-
+  // URL 파라미터에서 오류 정보 추출
+  const error_msg = searchParams.get('error_msg') || '결제 중 오류가 발생했습니다.';
+  const merchant_uid = searchParams.get('merchant_uid') || '알 수 없음';
+  
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen px-4">
-      <ToastContainer position="top-center" autoClose={3000} />
-      <div className="bg-white shadow-lg rounded-lg p-8 max-w-lg w-full">
-        <div className="text-center mb-6">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-100 mb-4">
-            <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 p-4">
+      <div className="w-full max-w-md p-8 space-y-6 bg-white rounded-lg shadow-md">
+        <div className="text-center">
+          <div className="w-20 h-20 mx-auto bg-red-100 rounded-full flex items-center justify-center">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </div>
-          <h2 className="text-2xl font-bold text-gray-800">결제 실패</h2>
-          <p className="text-gray-600 mt-2">결제 처리 중 오류가 발생했습니다.</p>
+          <h2 className="mt-4 text-2xl font-bold text-gray-800">결제에 실패했습니다</h2>
+          <p className="mt-2 text-gray-600">{error_msg}</p>
         </div>
-
-        <div className="bg-red-50 p-4 rounded-md mb-6">
-          <div className="mb-2">
-            <span className="font-medium text-red-700">오류 코드:</span>
-            <span className="ml-2 text-red-600">{code}</span>
+        
+        {/* 주문 정보 */}
+        <div className="mt-6 border-t border-gray-200 pt-4">
+          <div className="flex justify-between py-2">
+            <span className="text-gray-600">주문번호</span>
+            <span className="font-medium">{merchant_uid}</span>
           </div>
-          <div>
-            <span className="font-medium text-red-700">오류 메시지:</span>
-            <span className="ml-2 text-red-600">{message}</span>
-          </div>
-          {orderId && (
-            <div className="mt-2">
-              <span className="font-medium text-red-700">주문번호:</span>
-              <span className="ml-2 text-red-600">{orderId}</span>
-            </div>
-          )}
         </div>
-
-        <div className="text-center">
+        
+        {/* 버튼 영역 */}
+        <div className="mt-8 space-y-3">
           <button
-            onClick={goBackToPayment}
-            className="bg-indigo-600 text-white py-2 px-6 rounded-md shadow-sm font-medium hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+            onClick={() => router.push('/payment')}
+            className="block w-full text-center bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-md transition duration-200"
           >
             결제 다시 시도하기
           </button>
+          <Link href="/" className="block w-full text-center bg-gray-100 hover:bg-gray-200 text-gray-700 py-2 px-4 rounded-md transition duration-200">
+            홈으로 이동
+          </Link>
         </div>
       </div>
     </div>
+  );
+}
+
+// Suspense 경계로 감싼 페이지 컴포넌트
+export default function PaymentFailPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center min-h-screen">로딩 중...</div>}>
+      <PaymentFailContent />
+    </Suspense>
   );
 } 

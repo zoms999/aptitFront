@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, Suspense } from 'react';
 import { loadPaymentWidget, ANONYMOUS } from '@tosspayments/payment-widget-sdk';
 import { nanoid } from 'nanoid';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { toast } from 'react-toastify';
+import { toast, ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 import { useSession } from 'next-auth/react';
 
 // 로딩 컴포넌트 직접 구현
@@ -68,7 +69,8 @@ interface Product {
   pd_kind: string;
 }
 
-export default function PaymentPage() {
+// 결제 페이지 내용 컴포넌트
+function PaymentContent() {
   const { data: session, status } = useSession();
   const [paymentWidget, setPaymentWidget] = useState<PaymentWidgetInstance | null>(null);
   const [paymentMethodsWidget, setPaymentMethodsWidget] = useState<PaymentMethodsWidgetInstance | null>(null);
@@ -498,5 +500,15 @@ export default function PaymentPage() {
         </>
       )}
     </div>
+  );
+}
+
+// Suspense 경계로 감싼 페이지 컴포넌트
+export default function PaymentPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center min-h-screen">로딩 중...</div>}>
+      <ToastContainer position="top-center" autoClose={3000} />
+      <PaymentContent />
+    </Suspense>
   );
 } 

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
-import { db } from '../../../lib/db/prisma';
-import { authOptions } from '../auth/[...nextauth]/route';
+import prisma from '../../../lib/db';
+import { authOptions } from '../../../lib/auth';
 
 export async function GET() {
   try {
@@ -20,7 +20,7 @@ export async function GET() {
     
     // session.user에서 사용자 정보 확인
     console.log('대시보드 라우팅 - 사용자 상세 정보:', JSON.stringify(session.user, null, 2));
-    const userAny = session.user;
+    const userAny = session.user as any;
     
     // 세션에 필수 필드 검증
     if (userAny.id && userAny.ac_id) {
@@ -29,7 +29,7 @@ export async function GET() {
       
       // 기관 여부 검증
       try {
-        const validateResult = await db.$queryRaw`
+        const validateResult = await prisma.$queryRaw`
           SELECT ins_seq FROM mwd_account 
           WHERE ac_gid = ${ac_gid}::uuid
           AND ac_use = 'Y'
@@ -63,7 +63,7 @@ export async function GET() {
       console.log('기관 회원 대시보드로 라우팅');
       
       // 기관 정보 조회
-      const instituteResult = await db.$queryRaw`
+      const instituteResult = await prisma.$queryRaw`
         SELECT ins.ins_seq, ins.ins_name, tur.tur_seq, tur.tur_code,
               tur.tur_req_sum, tur.tur_use_sum
         FROM mwd_account ac
@@ -74,7 +74,7 @@ export async function GET() {
       `;
       
       // 1. 계정 상태 조회
-      const accountStatusResult = await db.$queryRaw`
+      const accountStatusResult = await prisma.$queryRaw`
         SELECT cr_pay, pd_kind, expire, state 
         FROM (
           SELECT ac.ac_gid, 
@@ -97,7 +97,7 @@ export async function GET() {
       `;
       
       // 2. 검사 목록 조회
-      const testsResult = await db.$queryRaw`
+      const testsResult = await prisma.$queryRaw`
         SELECT row_number() OVER (ORDER BY cr.cr_seq DESC) AS num, 
               cr.cr_seq, 
               cr.cr_pay, 
@@ -125,7 +125,7 @@ export async function GET() {
       `;
       
       // 3. 기관 회원 목록 조회
-      const membersResult = await db.$queryRaw`
+      const membersResult = await prisma.$queryRaw`
         SELECT pe.pe_seq, pe.pe_name, pe.pe_email, pe.pe_sex, pe.pe_cellphone,
               TO_CHAR(im.mem_insert_date, 'yyyy-mm-dd') AS join_date
         FROM mwd_account ac
@@ -197,7 +197,7 @@ export async function GET() {
       console.log('일반 회원 대시보드로 라우팅');
       
       // 1. 계정 상태 조회
-      const accountStatusResult = await db.$queryRaw`
+      const accountStatusResult = await prisma.$queryRaw`
         SELECT cr_pay, pd_kind, expire, state 
         FROM (
           SELECT ac.ac_gid, 
@@ -220,7 +220,7 @@ export async function GET() {
       `;
       
       // 2. 검사 목록 조회
-      const testsResult = await db.$queryRaw`
+      const testsResult = await prisma.$queryRaw`
         SELECT row_number() OVER (ORDER BY cr.cr_seq DESC) AS num, 
               cr.cr_seq, 
               cr.cr_pay, 
@@ -248,7 +248,7 @@ export async function GET() {
       `;
       
       // 3. 사용자 정보 조회
-      const userInfoResult = await db.$queryRaw`
+      const userInfoResult = await prisma.$queryRaw`
         SELECT pe.pe_name, pe.pe_sex, pe.pe_email, pe.pe_cellphone,
               pe.pe_birth_year, pe.pe_birth_month, pe.pe_birth_day
         FROM mwd_account ac
