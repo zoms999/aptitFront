@@ -225,7 +225,7 @@ export default function PersonalDashboard() {
                             <span className="px-2 py-1 text-xs text-gray-700 bg-gray-100 rounded-full">준비됨</span>
                           ) : test.done === 'I' ? (
                             <span className="px-2 py-1 text-xs text-yellow-700 bg-yellow-100 rounded-full">진행중</span>
-                          ) : test.done === 'D' ? (
+                          ) : test.done === 'E' ? (
                             <span className="px-2 py-1 text-xs text-green-700 bg-green-100 rounded-full">완료</span>
                           ) : (
                             <span className="px-2 py-1 text-xs text-gray-400 bg-gray-100 rounded-full">상태없음</span>
@@ -239,7 +239,7 @@ export default function PersonalDashboard() {
                             >
                               검사 시작
                             </button>
-                          ) : test.done === 'D' && (test.rview === 'Y' || test.rview === 'P') ? (
+                          ) : test.done === 'E' && (test.rview === 'Y' || test.rview === 'P') ? (
                             <button
                               onClick={() => router.push(`/test-result/${test.cr_seq}`)}
                               className="px-3 py-1 text-xs text-white bg-blue-500 rounded hover:bg-blue-600"

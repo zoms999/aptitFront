@@ -251,7 +251,7 @@ export default function LoginForm() {
         </button>
 
         <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
-          <AuthLinks />
+          <AuthLinks loginType={loginType} />
         </div>
       </form>
     </div>

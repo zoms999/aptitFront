@@ -262,6 +262,7 @@ export default function OrganizationDashboard() {
                       <th className="px-4 py-3">검사명</th>
                       <th className="px-4 py-3">시작일</th>
                       <th className="px-4 py-3">종료일</th>
+                      <th className="px-4 py-3">유효일자</th>
                       <th className="px-4 py-3">상태</th>
                       <th className="px-4 py-3">결과</th>
                     </tr>
@@ -273,17 +274,27 @@ export default function OrganizationDashboard() {
                         <td className="px-4 py-3">{test.pd_name}</td>
                         <td className="px-4 py-3">{test.startdate || '-'}</td>
                         <td className="px-4 py-3">{test.enddate || '-'}</td>
+                        <td className="px-4 py-3">{test.expiredate || '-'}</td>
                         <td className="px-4 py-3">
                           {test.done === 'R' ? (
                             <span className="px-2 py-1 text-xs text-gray-700 bg-gray-100 rounded-full">준비됨</span>
                           ) : test.done === 'I' ? (
                             <span className="px-2 py-1 text-xs text-yellow-700 bg-yellow-100 rounded-full">진행중</span>
-                          ) : (
+                          ) : test.done === 'E' ? (
                             <span className="px-2 py-1 text-xs text-green-700 bg-green-100 rounded-full">완료</span>
+                          ) : (
+                            <span className="px-2 py-1 text-xs text-gray-400 bg-gray-100 rounded-full">상태없음</span>
                           )}
                         </td>
                         <td className="px-4 py-3">
-                          {test.rview === 'Y' || test.rview === 'P' ? (
+                          {test.done === 'R' ? (
+                            <button
+                              onClick={() => router.push(`/test/${test.cr_seq}`)}
+                              className="px-3 py-1 text-xs text-white bg-green-500 rounded hover:bg-green-600"
+                            >
+                              검사 시작
+                            </button>
+                          ) : test.done === 'E' && (test.rview === 'Y' || test.rview === 'P') ? (
                             <button
                               onClick={() => router.push(`/test-result/${test.cr_seq}`)}
                               className="px-3 py-1 text-xs text-white bg-blue-500 rounded hover:bg-blue-600"
