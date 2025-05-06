@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 import AuthLinks from "./AuthLinks";
@@ -16,6 +16,24 @@ export default function LoginForm() {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
+
+  // URL 파라미터에서 오류 메시지 확인
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const expired = urlParams.get('expired');
+    const reason = urlParams.get('reason');
+    
+    if (expired === 'true') {
+      setError('세션이 만료되었습니다. 다시 로그인해주세요.');
+    } else if (reason) {
+      // 리다이렉트 이유에 따른 메시지 처리
+      if (reason === 'account_not_found') {
+        setError('계정 정보를 찾을 수 없습니다. 다시 로그인해주세요.');
+      } else if (reason === 'incomplete_session') {
+        setError('로그인 정보가 불완전합니다. 다시 로그인해주세요.');
+      }
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

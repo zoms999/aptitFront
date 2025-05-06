@@ -54,13 +54,40 @@ export default function Dashboard() {
       return;
     }
 
-    if (status === 'authenticated') {
+    if (status === 'authenticated' && session?.user) {
       fetchDashboardData();
     }
-  }, [status, router]);
+  }, [status, router, session]);
+
+  // API 오류 발생 시 세션 검증 및 로그아웃 처리 함수 추가
+  useEffect(() => {
+    if (errorDetails) {
+      console.log('API 오류 발생:', errorDetails);
+      
+      // 계정 정보를 찾을 수 없는 경우
+      if (errorDetails.error === "계정 정보를 찾을 수 없습니다.") {
+        console.log('계정 정보를 찾을 수 없어 메인 페이지로 이동');
+        router.push('/?redirected=true&reason=account_not_found');
+        return;
+      }
+      
+      // 기타 세션 만료 관련 오류의 경우
+      if (errorDetails.requireLogin || errorDetails.forceLogout) {
+        console.log('세션 만료로 로그아웃 처리');
+        router.push('/login?expired=true');
+      }
+    }
+  }, [errorDetails, router]);
 
   const fetchDashboardData = async () => {
     try {
+      // 세션 상태 추가 검증
+      if (!session?.user || !('id' in session.user)) {
+        console.log('세션 정보가 불완전하여 메인 페이지로 이동');
+        router.push('/?redirected=true&reason=incomplete_session');
+        return;
+      }
+      
       setLoading(true);
       console.log('Fetching dashboard data...');
       console.log('Session info:', session);

@@ -11,8 +11,27 @@ export default function Home() {
   const router = useRouter();
   
   useEffect(() => {
-    if (status === "authenticated" && session) {
-      // 이미 로그인된 사용자는 대시보드로 리다이렉트
+    // URL에 redirected=true 파라미터가 있으면 리다이렉트 중단
+    const urlParams = new URLSearchParams(window.location.search);
+    const redirected = urlParams.get('redirected');
+    const reason = urlParams.get('reason');
+    
+    if (redirected === 'true') {
+      console.log("이미 리다이렉트되었으므로 추가 리다이렉트 중단", { reason });
+      
+      // 계정 정보 문제가 있는 경우 세션 상태를 확인하고 필요시 로그인 페이지로 이동
+      if (status === "authenticated" && reason) {
+        if (reason === 'incomplete_session' || reason === 'account_not_found') {
+          console.log("세션 또는 계정 문제가 감지되어 로그아웃 처리가 필요합니다");
+          // 여기서는 자동 로그아웃을 하지 않고 사용자가 로그인 화면에서 처리하도록 함
+        }
+      }
+      return;
+    }
+    
+    // 세션에 문제가 없는 인증된 사용자만 대시보드로 리다이렉트
+    if (status === "authenticated" && session?.user && 'id' in session.user) {
+      console.log("인증된 사용자 - 대시보드로 리다이렉트", session);
       router.push("/dashboard");
     }
   }, [session, status, router]);
