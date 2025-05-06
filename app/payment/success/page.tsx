@@ -1,6 +1,6 @@
 "use client";
 
-import React, { Suspense } from 'react';
+import React, { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
@@ -8,19 +8,76 @@ import { redirect } from 'next/navigation';
 // 결제 성공 페이지 내용 컴포넌트
 function PaymentSuccessContent() {
   const searchParams = useSearchParams();
+  const [paymentInfo, setPaymentInfo] = useState<{
+    success: boolean;
+    message: string;
+    orderId: string;
+    paymentKey: string;
+    totalAmount: number;
+    method: string;
+    receiptUrl?: string;
+  } | null>(null);
+  const [loading, setLoading] = useState(true);
   
   // URL 파라미터에서 결제 데이터 추출
-  const imp_uid = searchParams.get('imp_uid');
-  const merchant_uid = searchParams.get('merchant_uid');
-  const paid_amount = searchParams.get('paid_amount');
-  const status = searchParams.get('status');
-  const success = searchParams.get('success') === 'true';
-  const error_msg = searchParams.get('error_msg') || '';
+  const paymentKey = searchParams.get('paymentKey');
+  const orderId = searchParams.get('orderId');
+  const amount = searchParams.get('amount');
   
-  // 필수 파라미터가 없으면 메인으로 리다이렉트
-  if (!imp_uid || !merchant_uid) {
-    redirect('/');
+  // 결제 정보 조회
+  useEffect(() => {
+    // 필수 파라미터가 없으면 메인으로 리다이렉트
+    if (!paymentKey || !orderId || !amount) {
+      console.error('필수 결제 파라미터 누락:', { paymentKey, orderId, amount });
+      redirect('/');
+      return;
+    }
+    
+    // 결제 확인 API 호출
+    const confirmPayment = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch('/api/payment/confirm', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            paymentKey,
+            orderId,
+            amount: Number(amount),
+          }),
+        });
+        
+        const data = await response.json();
+        console.log('결제 확인 응답:', data);
+        
+        if (response.ok && data.success) {
+          setPaymentInfo(data);
+        } else {
+          console.error('결제 확인 실패:', data.message || '알 수 없는 오류');
+        }
+      } catch (error) {
+        console.error('결제 확인 요청 오류:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    confirmPayment();
+  }, [paymentKey, orderId, amount]);
+  
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mb-4"></div>
+        <p className="text-gray-600">결제 정보를 확인 중입니다...</p>
+      </div>
+    );
   }
+  
+  const success = paymentInfo && paymentInfo.success;
+  const errorMsg = paymentInfo ? paymentInfo.message : '결제 정보를 확인할 수 없습니다.';
   
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 p-4">
@@ -44,7 +101,7 @@ function PaymentSuccessContent() {
                 </svg>
               </div>
               <h2 className="mt-4 text-2xl font-bold text-gray-800">결제에 실패했습니다</h2>
-              <p className="mt-2 text-gray-600">{error_msg || '결제 중 오류가 발생했습니다. 다시 시도해주세요.'}</p>
+              <p className="mt-2 text-gray-600">{errorMsg || '결제 중 오류가 발생했습니다. 다시 시도해주세요.'}</p>
             </>
           )}
         </div>
@@ -53,16 +110,16 @@ function PaymentSuccessContent() {
         <div className="mt-6 border-t border-gray-200 pt-4">
           <div className="flex justify-between py-2">
             <span className="text-gray-600">주문번호</span>
-            <span className="font-medium">{merchant_uid}</span>
+            <span className="font-medium">{paymentInfo?.orderId || orderId}</span>
           </div>
           <div className="flex justify-between py-2">
-            <span className="text-gray-600">결제번호</span>
-            <span className="font-medium">{imp_uid}</span>
+            <span className="text-gray-600">결제키</span>
+            <span className="font-medium">{paymentInfo?.paymentKey || paymentKey}</span>
           </div>
-          {paid_amount && (
+          {paymentInfo?.totalAmount && (
             <div className="flex justify-between py-2">
               <span className="text-gray-600">결제금액</span>
-              <span className="font-medium">{Number(paid_amount).toLocaleString()}원</span>
+              <span className="font-medium">{Number(paymentInfo.totalAmount).toLocaleString()}원</span>
             </div>
           )}
           <div className="flex justify-between py-2">
@@ -71,6 +128,20 @@ function PaymentSuccessContent() {
               {success ? '결제완료' : '결제실패'}
             </span>
           </div>
+          {paymentInfo?.method && (
+            <div className="flex justify-between py-2">
+              <span className="text-gray-600">결제수단</span>
+              <span className="font-medium">{paymentInfo.method}</span>
+            </div>
+          )}
+          {paymentInfo?.receiptUrl && (
+            <div className="flex justify-between py-2">
+              <span className="text-gray-600">영수증</span>
+              <a href={paymentInfo.receiptUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                영수증 보기
+              </a>
+            </div>
+          )}
         </div>
         
         {/* 버튼 영역 */}
