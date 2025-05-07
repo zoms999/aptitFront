@@ -296,7 +296,7 @@ export default function OrganizationDashboard() {
                             </button>
                           ) : test.done === 'I' ? (
                             <button
-                              onClick={() => router.push(`/test/${test.cr_seq}`)}
+                              onClick={() => router.push(`/test/${test.cr_seq}/start`)}
                               className="px-3 py-1 text-xs text-white bg-yellow-500 rounded hover:bg-yellow-600"
                             >
                               계속하기
