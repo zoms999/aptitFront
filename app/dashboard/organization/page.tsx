@@ -294,6 +294,13 @@ export default function OrganizationDashboard() {
                             >
                               검사 시작
                             </button>
+                          ) : test.done === 'I' ? (
+                            <button
+                              onClick={() => router.push(`/test/${test.cr_seq}`)}
+                              className="px-3 py-1 text-xs text-white bg-yellow-500 rounded hover:bg-yellow-600"
+                            >
+                              계속하기
+                            </button>
                           ) : test.done === 'E' && (test.rview === 'Y' || test.rview === 'P') ? (
                             <button
                               onClick={() => router.push(`/test-result/${test.cr_seq}`)}
