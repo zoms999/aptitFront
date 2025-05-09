@@ -23,6 +23,7 @@ interface TestData {
   test_step?: number;
   current_number?: number;
   total_questions?: number;
+  completed_pages?: number;
   questions: Question[];
 }
 
@@ -60,13 +61,28 @@ export default function TestStartPage({ params }: TestStartPageProps) {
 
   useEffect(() => {
     // 인증 상태 확인
+    console.log('useEffect 실행, status:', status);
+    
+    // 개발 환경에서는 인증 상태와 관계없이 테스트 데이터 로드
+    if (process.env.NODE_ENV === 'development') {
+      console.log('개발 환경에서 fetchTestData 호출');
+      fetchTestData();
+      return;
+    }
+    
+    if (status === 'loading') {
+      console.log('인증 상태 로딩 중...');
+      return;
+    }
+    
     if (status === 'unauthenticated') {
+      console.log('인증되지 않은 사용자, 로그인 페이지로 이동');
       router.push('/login');
       return;
     }
 
-    // 페이지 로드 시 처리
     if (status === 'authenticated') {
+      console.log('인증된 사용자, fetchTestData 호출');
       fetchTestData();
     }
   }, [status, router, testId]);
@@ -74,9 +90,11 @@ export default function TestStartPage({ params }: TestStartPageProps) {
   // 테스트 데이터 가져오기
   const fetchTestData = async () => {
     try {
+      console.log('fetchTestData 함수 실행 시작');
       setLoading(true);
       
       // 1. 테스트 데이터 가져오기
+      console.log('API 호출 시작: /api/test/' + testId + '/start');
       const response = await fetch(`/api/test/${testId}/start`);
       
       if (!response.ok) {
@@ -85,23 +103,33 @@ export default function TestStartPage({ params }: TestStartPageProps) {
       }
       
       const data = await response.json();
-      console.log('테스트 데이터:', data);
+      console.log('API 응답 데이터:', data);
+      
+      // 현재 문항 번호와 총 문항 수 가져오기 (API에서 제공하는 경우)
+      // API에서 해당 정보를 제공하지 않는 경우 기본값 사용
+      const currentNumber = data.current_question || data.current_number || 1;
+      const totalQuestions = data.total_questions || 30;
+      const completedPages = data.completed_pages || currentNumber - 1; // 완료된 페이지 수
       
       // 추가 정보 설정
       const enhancedData = {
         ...data,
         test_kind: '종합검사',
         test_step: getTestStep(data.step),
-        current_number: 6,
-        total_questions: 135
+        current_number: currentNumber,
+        total_questions: totalQuestions,
+        completed_pages: completedPages
       };
       
+      console.log('enhancedData 객체:', enhancedData);
       setTestData(enhancedData);
+      console.log('setTestData 호출 완료, step:', enhancedData.step, 'test_step:', enhancedData.test_step);
     } catch (err) {
       console.error('테스트 데이터 로드 오류:', err);
       setError(err instanceof Error ? err.message : '오류가 발생했습니다');
     } finally {
       setLoading(false);
+      console.log('fetchTestData 함수 실행 완료, loading:', false);
     }
   };
 
@@ -250,6 +278,7 @@ export default function TestStartPage({ params }: TestStartPageProps) {
         
         const data = await response.json();
         console.log('답변 저장 결과:', data);
+        console.log('완료된 페이지:', data.completed_pages, '총 문항 수:', data.total_questions);
         
         // 테스트 완료 여부 확인
         if (data.isCompleted) {
@@ -263,8 +292,20 @@ export default function TestStartPage({ params }: TestStartPageProps) {
           setTestData({
             ...testData,
             ...data.nextQuestion,
-            questions: data.questions
+            questions: data.questions,
+            // 완료 페이지와 총 페이지 수 정보 업데이트
+            completed_pages: data.completed_pages,
+            total_questions: data.total_questions
           });
+          
+          // 상태 업데이트 후 확인 로그
+          setTimeout(() => {
+            console.log('테스트 데이터 업데이트 후:', {
+              completed_pages: data.completed_pages,
+              total_questions: data.total_questions
+            });
+          }, 0);
+          
           // 이미지 번호 증가
           setCurrentImageNumber(prev => (prev % 10) + 1);
           // 선택 답변 초기화
@@ -299,7 +340,7 @@ export default function TestStartPage({ params }: TestStartPageProps) {
           <div className="flex items-center space-x-4">
             <div className="px-4 py-2 rounded-lg bg-teal-500 text-white font-bold">종합검사</div>
             
-            <div className="flex items-center">
+            <div className="flex items-center space-x-2">
               <button className={`px-4 py-2 rounded-full ${testData?.test_step === 1 ? theme.activeBg : 'bg-transparent border border-white'} mr-2`}>
                 단계1 <span className="ml-2">성향 진단</span>
               </button>
@@ -315,10 +356,16 @@ export default function TestStartPage({ params }: TestStartPageProps) {
           </div>
           
           <div className="text-white flex items-center">
-            <div className="w-8 h-8 rounded-full bg-yellow-400 flex items-center justify-center text-gray-800 font-bold">
-              <span className="material-icons">timer</span>
+            <div className="inline-flex items-center">
+              <div className="w-8 h-8 rounded-full bg-yellow-400 flex items-center justify-center text-gray-800 font-bold mr-2">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <span className="font-medium">
+                {testData?.completed_pages || 0}/{testData?.total_questions || 30}
+              </span>
             </div>
-            <span className="ml-2">{testData?.current_number || 6}/{testData?.total_questions || 135}</span>
           </div>
         </div>
       </div>
@@ -326,6 +373,13 @@ export default function TestStartPage({ params }: TestStartPageProps) {
       {/* 컨텐츠 영역 - 검사 종류에 따라 다른 디자인 */}
       <div id="content" className="examine">
         <div className="max-w-6xl mx-auto px-4 py-10">
+          {/* 성향 진단 단계명 표시 */}
+          {isPersonalityTest && (
+            <div className="bg-gray-500 text-white px-4 py-1 rounded-md w-28 mb-8">
+              {testData?.qua_type || 1}
+            </div>
+          )}
+          
           {/* 선호도 진단일 경우 이미지 번호 표시 */}
           {isImagePreferenceTest && (
             <div className="bg-gray-500 text-white px-4 py-1 rounded-md w-28 mb-8">
@@ -335,92 +389,143 @@ export default function TestStartPage({ params }: TestStartPageProps) {
 
           {testData && testData.questions && testData.questions.length > 0 ? (
             <div className="space-y-8">
-              {testData.questions.map((question) => (
-                <div key={question.qu_code} className={`mb-8 ${isThinkingTest ? 'bg-gray-50 p-6 rounded-lg shadow-sm' : ''}`}>
-                  {/* 문항 영역 - 검사 종류에 따라 다른 스타일 */}
-                  {/* 1. 성향 진단 */}
-                  {isPersonalityTest && (
-                    <div className="test-form">
-                      <div className="question">
-                        <div className="flex items-center mb-4">
-                          <div className="bg-blue-200 rounded-full w-10 h-10 flex items-center justify-center mr-4">
-                            <span className="text-blue-800 font-bold">{question.qu_order}</span>
-                          </div>
-                          <p className="text-lg font-bold text-gray-800">
-                            {question.qu_text}
-                          </p>
+              {/* 1. 성향 진단 - 새로운 디자인 */}
+              {isPersonalityTest && (
+                <div>
+                  {testData.questions.map((question) => (
+                    <div key={question.qu_code} className="mb-10">
+                      <div className="flex items-start mb-4">
+                        <div className="bg-gray-300 rounded-full w-10 h-10 flex items-center justify-center mr-4 flex-shrink-0">
+                          <span className="text-gray-700 font-bold">{question.qu_order}</span>
                         </div>
+                        <p className="text-lg pt-2">{question.qu_text}</p>
                       </div>
-                      <div className="answer">
-                        <div className={`grid ${question.choices.length > 4 ? 'grid-cols-2 md:grid-cols-3 lg:grid-cols-6' : 'grid-cols-2 md:grid-cols-4'} gap-3 mt-4`}>
-                          {question.choices.map((choice) => (
-                            <button
-                              key={`${question.qu_code}-${choice.an_val}`}
-                              onClick={() => handleSelectChoice(question.qu_code, choice.an_val, choice.an_wei)}
-                              className={`py-3 px-4 text-center border transition-colors ${
-                                selectedAnswers[question.qu_code] === choice.an_val
-                                  ? `${theme.selectedBg} ${theme.selectedBorder} font-bold ${theme.selectedText}`
-                                  : 'border-gray-300 hover:bg-gray-50'
-                              }`}
-                            >
-                              {choice.an_text}
-                            </button>
-                          ))}
+                      
+                      <div className="grid grid-cols-6 gap-1 mt-3 pl-14">
+                        <button
+                          onClick={() => handleSelectChoice(question.qu_code, 1, 0)}
+                          className={`py-3 px-2 text-center rounded-md ${
+                            selectedAnswers[question.qu_code] === 1
+                              ? 'bg-blue-100 border border-blue-500 text-blue-700 font-bold'
+                              : 'bg-gray-100 hover:bg-gray-200'
+                          }`}
+                        >
+                          매우 그렇다
+                        </button>
+                        <button
+                          onClick={() => handleSelectChoice(question.qu_code, 2, 0)}
+                          className={`py-3 px-2 text-center rounded-md ${
+                            selectedAnswers[question.qu_code] === 2
+                              ? 'bg-blue-100 border border-blue-500 text-blue-700 font-bold'
+                              : 'bg-gray-100 hover:bg-gray-200'
+                          }`}
+                        >
+                          그렇다
+                        </button>
+                        <button
+                          onClick={() => handleSelectChoice(question.qu_code, 3, 0)}
+                          className={`py-3 px-2 text-center rounded-md ${
+                            selectedAnswers[question.qu_code] === 3
+                              ? 'bg-blue-100 border border-blue-500 text-blue-700 font-bold'
+                              : 'bg-gray-100 hover:bg-gray-200'
+                          }`}
+                        >
+                          약간 그렇다
+                        </button>
+                        <button
+                          onClick={() => handleSelectChoice(question.qu_code, 4, 0)}
+                          className={`py-3 px-2 text-center rounded-md ${
+                            selectedAnswers[question.qu_code] === 4
+                              ? 'bg-blue-100 border border-blue-500 text-blue-700 font-bold'
+                              : 'bg-gray-100 hover:bg-gray-200'
+                          }`}
+                        >
+                          별로 그렇지 않다
+                        </button>
+                        <button
+                          onClick={() => handleSelectChoice(question.qu_code, 5, 0)}
+                          className={`py-3 px-2 text-center rounded-md ${
+                            selectedAnswers[question.qu_code] === 5
+                              ? 'bg-blue-100 border border-blue-500 text-blue-700 font-bold'
+                              : 'bg-gray-100 hover:bg-gray-200'
+                          }`}
+                        >
+                          그렇지 않다
+                        </button>
+                        <button
+                          onClick={() => handleSelectChoice(question.qu_code, 6, 0)}
+                          className={`py-3 px-2 text-center rounded-md ${
+                            selectedAnswers[question.qu_code] === 6
+                              ? 'bg-blue-100 border border-blue-500 text-blue-700 font-bold'
+                              : 'bg-gray-100 hover:bg-gray-200'
+                          }`}
+                        >
+                          전혀 그렇지 않다
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* 2. 사고력 진단 */}
+              {isThinkingTest && (
+                <>
+                  {testData.questions.map((question) => (
+                    <div key={question.qu_code} className="mb-8 bg-gray-50 p-6 rounded-lg shadow-sm">
+                      <div className="test-form">
+                        <div className="question">
+                          <div className="flex items-start mb-6">
+                            <div className="bg-indigo-200 rounded-full w-10 h-10 flex items-center justify-center mr-4 mt-1">
+                              <span className="text-indigo-800 font-bold">{question.qu_order}</span>
+                            </div>
+                            <div>
+                              <p className="text-lg font-bold text-gray-800 mb-4">
+                                {question.qu_text}
+                              </p>
+                              {question.qu_image && (
+                                <div className="bg-white p-4 border border-gray-300 rounded-lg mb-6">
+                                  <img 
+                                    src={question.qu_image} 
+                                    alt="문제 이미지" 
+                                    className="max-w-full h-auto mx-auto"
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="answer pl-14">
+                          <div className="space-y-3">
+                            {question.choices.map((choice) => (
+                              <button
+                                key={`${question.qu_code}-${choice.an_val}`}
+                                onClick={() => handleSelectChoice(question.qu_code, choice.an_val, choice.an_wei)}
+                                className={`w-full text-left py-3 px-4 border rounded transition-colors flex items-start ${
+                                  selectedAnswers[question.qu_code] === choice.an_val
+                                    ? `${theme.selectedBg} ${theme.selectedBorder} font-bold ${theme.selectedText}`
+                                    : 'border-gray-300 hover:bg-gray-50'
+                                }`}
+                              >
+                                <span className="bg-gray-200 text-gray-700 w-6 h-6 rounded-full flex items-center justify-center mr-3 flex-shrink-0">
+                                  {choice.an_val}
+                                </span>
+                                <span>{choice.an_text}</span>
+                              </button>
+                            ))}
+                          </div>
                         </div>
                       </div>
                     </div>
-                  )}
+                  ))}
+                </>
+              )}
 
-                  {/* 2. 사고력 진단 */}
-                  {isThinkingTest && (
-                    <div className="test-form">
-                      <div className="question">
-                        <div className="flex items-start mb-6">
-                          <div className="bg-indigo-200 rounded-full w-10 h-10 flex items-center justify-center mr-4 mt-1">
-                            <span className="text-indigo-800 font-bold">{question.qu_order}</span>
-                          </div>
-                          <div>
-                            <p className="text-lg font-bold text-gray-800 mb-4">
-                              {question.qu_text}
-                            </p>
-                            {question.qu_image && (
-                              <div className="bg-white p-4 border border-gray-300 rounded-lg mb-6">
-                                <img 
-                                  src={question.qu_image} 
-                                  alt="문제 이미지" 
-                                  className="max-w-full h-auto mx-auto"
-                                />
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="answer pl-14">
-                        <div className="space-y-3">
-                          {question.choices.map((choice) => (
-                            <button
-                              key={`${question.qu_code}-${choice.an_val}`}
-                              onClick={() => handleSelectChoice(question.qu_code, choice.an_val, choice.an_wei)}
-                              className={`w-full text-left py-3 px-4 border rounded transition-colors flex items-start ${
-                                selectedAnswers[question.qu_code] === choice.an_val
-                                  ? `${theme.selectedBg} ${theme.selectedBorder} font-bold ${theme.selectedText}`
-                                  : 'border-gray-300 hover:bg-gray-50'
-                              }`}
-                            >
-                              <span className="bg-gray-200 text-gray-700 w-6 h-6 rounded-full flex items-center justify-center mr-3 flex-shrink-0">
-                                {choice.an_val}
-                              </span>
-                              <span>{choice.an_text}</span>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* 3. 선호도 진단 */}
-                  {isImagePreferenceTest && (
-                    <div className="test-form">
+              {/* 3. 선호도 진단 */}
+              {isImagePreferenceTest && (
+                <div className="mb-8">
+                  {testData.questions.map((question) => (
+                    <div key={question.qu_code} className="test-form">
                       <div className="question">
                         <div className="flex items-center mb-4">
                           <div className="bg-gray-300 rounded-full w-10 h-10 flex items-center justify-center mr-4">
@@ -460,12 +565,12 @@ export default function TestStartPage({ params }: TestStartPageProps) {
                         ))}
                       </div>
                     </div>
-                  )}
+                  ))}
                 </div>
-              ))}
+              )}
 
               {/* 다음 버튼 */}
-              <div className="flex justify-center mt-8">
+              <div className="flex justify-center mt-12">
                 <button
                   onClick={handleNextQuestion}
                   disabled={isSubmitting}

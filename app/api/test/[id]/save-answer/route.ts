@@ -111,30 +111,68 @@ export async function POST(
 
     // 4. 완료율 계산
     const progressResult = await prisma.$queryRaw`
-      WITH anw_list AS (
-          SELECT *
-          FROM mwd_answer_progress ap,
-               mwd_answer an,
-               mwd_question qu
-          WHERE ap.anp_seq = ${anp_seq}::integer
-            AND an.anp_seq = ap.anp_seq
-            AND qu.qu_code = an.qu_code
-            AND qu.qu_qusyn = 'Y'
-            AND qu.qu_use = 'Y'
-            AND qu.qu_kind1 = ap.anp_step
-            AND an.an_progress > 0
-      )
-      SELECT t.tcnt,
-             a.acnt,
-             CASE
-                 WHEN step = 'thk' THEN 'ui green progress'
-                 WHEN step = 'tnd' THEN 'ui pink progress'
-                 WHEN step = 'img' THEN 'ui blue progress'
-             END AS progress,
-             ROUND((a.acnt::float / NULLIF(t.tcnt, 0)) * 100) AS completion_percentage
-      FROM (SELECT COUNT(*) AS tcnt, MAX(anp_step) AS step FROM anw_list) t,
-           (SELECT COUNT(*) AS acnt FROM anw_list WHERE an_ex >= 0) a
+      WITH current_progress_details AS (
+        -- 현재 anp_seq에 대한 step, ac_gid, cr_seq, pd_kind 정보를 가져옵니다.
+        SELECT
+            ap.anp_seq,
+            ap.anp_step,
+            ap.ac_gid,
+            ap.cr_seq,
+            cr.pd_kind
+        FROM mwd_answer_progress ap
+        JOIN mwd_choice_result cr ON cr.ac_gid = ap.ac_gid AND cr.cr_seq = ap.cr_seq
+        WHERE ap.anp_seq = ${anp_seq}::integer
+        LIMIT 1 -- anp_seq는 PK이므로 하나의 행만 반환됩니다.
+    ),
+    total_questions_for_step AS (
+        -- 현재 단계(anp_step)의 "총 문제 수 (tcnt)"를 계산합니다.
+        SELECT
+            COUNT(qu.qu_code) AS tcnt,
+            cpd.anp_step AS step
+        FROM mwd_question qu
+        JOIN current_progress_details cpd ON qu.qu_kind1 = cpd.anp_step -- 현재 단계의 문제만 필터링
+        WHERE qu.qu_use = 'Y'
+          AND qu.qu_qusyn = 'Y' -- 사용자의 "총문제수" 예시 쿼리 조건
+          -- pd_kind에 따른 필터링
+          AND (CASE WHEN cpd.pd_kind = 'basic' THEN qu.qu_kind1 != 'thk' ELSE TRUE END)
+        GROUP BY cpd.anp_step
+    ),
+    answered_questions_for_step AS (
+        -- 현재 단계(anp_step)에서 "답변된 문제 수 (acnt)"를 계산합니다.
+       SELECT
+        COUNT(an.qu_code) AS acnt -- 또는 COUNT(*)
+        FROM mwd_answer an
+        JOIN mwd_question qu ON qu.qu_code = an.qu_code
+        JOIN current_progress_details cpd ON an.anp_seq = cpd.anp_seq AND qu.qu_kind1 = cpd.anp_step
+        WHERE an.an_progress > 0
+          AND an.an_ex >= 0
+          AND qu.qu_use = 'Y'
+          AND qu.qu_qusyn = 'Y'
+          AND (CASE WHEN cpd.pd_kind = 'basic' THEN qu.qu_kind1 != 'thk' ELSE TRUE END)
+    )
+    SELECT
+        COALESCE(tqs.tcnt, 0) AS tcnt,
+        COALESCE(aqs.acnt, 0) AS acnt,
+        cpd.anp_step AS step, -- current_progress_details에서 step을 가져옴
+        CASE
+            WHEN cpd.anp_step = 'thk' THEN 'ui green progress'
+            WHEN cpd.anp_step = 'tnd' THEN 'ui pink progress'
+            WHEN cpd.anp_step = 'img' THEN 'ui blue progress'
+            ELSE 'ui grey progress' -- 기본값 또는 에러 처리
+        END AS progress, -- progress로 컬럼명 변경
+        CASE
+            WHEN COALESCE(tqs.tcnt, 0) = 0 THEN 0 -- 분모가 0이면 0%
+            ELSE ROUND((COALESCE(aqs.acnt, 0)::numeric / tqs.tcnt) * 100) -- numeric으로 형변환하여 정확도 향상
+        END AS completion_percentage
+    FROM
+        current_progress_details cpd
+    LEFT JOIN
+        total_questions_for_step tqs ON cpd.anp_step = tqs.step
+    LEFT JOIN
+        answered_questions_for_step aqs ON 1=1 -- answered_questions_for_step은 항상 단일 행(또는 0)을 반환
     `;
+
+    console.log('progressResult:', progressResult);
 
     // 5. 현재 페이지에 표시할 문항과 답변 선택지 조회
     const questionFilename = nextQuestion?.qu_filename;
@@ -272,7 +310,10 @@ export async function POST(
       isCompleted,
       nextQuestion,
       progress: Array.isArray(progressResult) && progressResult.length > 0 ? progressResult[0] : null,
-      questions
+      questions,
+      // 현재 페이지와 총 문항 수 정보 추가
+      completed_pages: Array.isArray(progressResult) && progressResult.length > 0 ? progressResult[0].acnt : 0,
+      total_questions: Array.isArray(progressResult) && progressResult.length > 0 ? progressResult[0].tcnt : 0
     });
 
     console.log('답변 저장 완료');
