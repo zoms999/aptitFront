@@ -269,13 +269,85 @@ export async function POST(
     // 완료 상태 확인
     const isCompleted = !nextQuestion;
     if (isCompleted) {
-      // 모든 문항 완료 시 상태 업데이트
-      await prisma.$queryRaw`
-        UPDATE mwd_answer_progress
-        SET anp_done = 'E',
-            anp_end_date = NOW()
-        WHERE anp_seq = ${anp_seq}::integer
+      // 현재 단계 정보 가져오기
+      const currentStepResult = await prisma.$queryRaw`
+        SELECT anp_step FROM mwd_answer_progress WHERE anp_seq = ${anp_seq}::integer
       `;
+      
+      const currentStep = Array.isArray(currentStepResult) && currentStepResult.length > 0 
+        ? (currentStepResult[0] as { anp_step: string }).anp_step 
+        : '';
+        
+      console.log('현재 단계:', currentStep);
+      
+      // 성향 진단(tnd) 단계가 완료된 경우, 성향 점수 계산 후 저장
+      if (currentStep === 'tnd') {
+        console.log('성향 진단 단계 완료됨, 점수 계산 시작');
+        
+        // 1. 기존 점수 데이터 삭제
+        await prisma.$queryRaw`
+          DELETE FROM mwd_score1 
+          WHERE anp_seq = ${anp_seq}::integer 
+          AND sc1_step = 'tnd'
+        `;
+        
+        // 2. 새로운 점수 데이터 계산 및 삽입
+        await prisma.$queryRaw`
+          INSERT INTO mwd_score1 
+          (anp_seq, sc1_step, qua_code, sc1_score, sc1_rate, sc1_rank, sc1_qcnt) 
+          SELECT 
+            ${anp_seq}::integer AS anpseq, 
+            'tnd' AS tnd, 
+            qua_code, 
+            score, 
+            rate, 
+            row_number() OVER (ORDER BY rate DESC, fcnt DESC, ocnt), 
+            cnt 
+          FROM (
+            SELECT 
+              qa.qua_code, 
+              sum(an.an_wei) AS score, 
+              round(cast(sum(an.an_wei) AS numeric)/cast(qa.qua_totalscore AS numeric),3) AS rate, 
+              count(*) AS cnt, 
+              cast(sum(CASE WHEN an.an_wei = 5 THEN 1 ELSE 0 END) AS numeric) AS fcnt, 
+              cast(sum(CASE WHEN an.an_wei = 1 THEN 1 ELSE 0 END) AS numeric) AS ocnt 
+            FROM 
+              mwd_answer an, 
+              mwd_question qu, 
+              mwd_question_attr qa 
+            WHERE 
+              an.anp_seq = ${anp_seq}::integer 
+              AND qu.qu_code = an.qu_code 
+              AND qu.qu_qusyn = 'Y' 
+              AND qu.qu_use = 'Y' 
+              AND qu.qu_kind1 = 'tnd' 
+              AND qa.qua_code = qu.qu_kind2 
+              AND an.an_ex > 0 
+              AND an.an_progress > 0 
+            GROUP BY 
+              qa.qua_code, qa.qua_totalscore
+          ) AS t1
+        `;
+        
+        // 3. 다음 단계(사고력 진단)로 업데이트
+        await prisma.$queryRaw`
+          UPDATE mwd_answer_progress 
+          SET qu_code = 'thk00000', 
+              anp_done = 'I', 
+              anp_step = 'thk' 
+          WHERE anp_seq = ${anp_seq}::integer
+        `;
+        
+        console.log('성향 진단 점수 계산 및 다음 단계 업데이트 완료');
+      } else {
+        // 그 외 단계에서는 기본 완료 처리
+        await prisma.$queryRaw`
+          UPDATE mwd_answer_progress
+          SET anp_done = 'E',
+              anp_end_date = NOW()
+          WHERE anp_seq = ${anp_seq}::integer
+        `;
+      }
     }
 
     // BigInt 직렬화 오류 해결을 위한 헬퍼 함수
@@ -315,6 +387,95 @@ export async function POST(
       completed_pages: Array.isArray(progressResult) && progressResult.length > 0 ? progressResult[0].acnt : 0,
       total_questions: Array.isArray(progressResult) && progressResult.length > 0 ? progressResult[0].tcnt : 0
     });
+
+    // 성향 진단(tnd) 단계의 마지막 페이지 완료 여부 체크
+    if (!isCompleted && step === 'tnd') {
+      const currentStep = Array.isArray(progressResult) && progressResult.length > 0 
+        ? (progressResult[0] as any).step
+        : '';
+      
+      const completedPages = Array.isArray(progressResult) && progressResult.length > 0 
+        ? (progressResult[0] as any).acnt 
+        : 0;
+      
+      const totalQuestions = Array.isArray(progressResult) && progressResult.length > 0 
+        ? (progressResult[0] as any).tcnt 
+        : 0;
+        
+      console.log(`TND 체크: 완료된 페이지 ${completedPages}, 총 문항 수 ${totalQuestions}`);
+      
+      // 성향 진단 단계의 마지막 5개 문항을 제외한 모든 문항이 완료된 경우
+      if (currentStep === 'tnd' && completedPages >= totalQuestions - 5) {
+        console.log('성향 진단 마지막 문항 완료됨, 점수 계산 준비');
+        
+        // 응답 데이터에 성향 진단 완료 플래그 추가
+        (responseData as any).isStepCompletingSoon = true;
+      }
+      
+      // 성향 진단의 모든 문항이 완료된 경우
+      if (currentStep === 'tnd' && completedPages >= totalQuestions) {
+        console.log('성향 진단 모든 문항 완료됨, 점수 계산 시작');
+        
+        // 1. 기존 점수 데이터 삭제
+        await prisma.$queryRaw`
+          DELETE FROM mwd_score1 
+          WHERE anp_seq = ${anp_seq}::integer 
+          AND sc1_step = 'tnd'
+        `;
+        
+        // 2. 새로운 점수 데이터 계산 및 삽입
+        await prisma.$queryRaw`
+          INSERT INTO mwd_score1 
+          (anp_seq, sc1_step, qua_code, sc1_score, sc1_rate, sc1_rank, sc1_qcnt) 
+          SELECT 
+            ${anp_seq}::integer AS anpseq, 
+            'tnd' AS tnd, 
+            qua_code, 
+            score, 
+            rate, 
+            row_number() OVER (ORDER BY rate DESC, fcnt DESC, ocnt), 
+            cnt 
+          FROM (
+            SELECT 
+              qa.qua_code, 
+              sum(an.an_wei) AS score, 
+              round(cast(sum(an.an_wei) AS numeric)/cast(qa.qua_totalscore AS numeric),3) AS rate, 
+              count(*) AS cnt, 
+              cast(sum(CASE WHEN an.an_wei = 5 THEN 1 ELSE 0 END) AS numeric) AS fcnt, 
+              cast(sum(CASE WHEN an.an_wei = 1 THEN 1 ELSE 0 END) AS numeric) AS ocnt 
+            FROM 
+              mwd_answer an, 
+              mwd_question qu, 
+              mwd_question_attr qa 
+            WHERE 
+              an.anp_seq = ${anp_seq}::integer 
+              AND qu.qu_code = an.qu_code 
+              AND qu.qu_qusyn = 'Y' 
+              AND qu.qu_use = 'Y' 
+              AND qu.qu_kind1 = 'tnd' 
+              AND qa.qua_code = qu.qu_kind2 
+              AND an.an_ex > 0 
+              AND an.an_progress > 0 
+            GROUP BY 
+              qa.qua_code, qa.qua_totalscore
+          ) AS t1
+        `;
+        
+        // 3. 다음 단계(사고력 진단)로 업데이트
+        await prisma.$queryRaw`
+          UPDATE mwd_answer_progress 
+          SET qu_code = 'thk00000', 
+              anp_done = 'I', 
+              anp_step = 'thk' 
+          WHERE anp_seq = ${anp_seq}::integer
+        `;
+        
+        console.log('성향 진단 점수 계산 및 다음 단계 업데이트 완료');
+        
+        // 응답 데이터에 성향 진단 완료 플래그 추가
+        (responseData as any).isStepCompleted = true;
+      }
+    }
 
     console.log('답변 저장 완료');
     return NextResponse.json(responseData);

@@ -24,6 +24,7 @@ interface TestData {
   current_number?: number;
   total_questions?: number;
   completed_pages?: number;
+  isStepCompleted?: boolean;
   questions: Question[];
 }
 
@@ -238,6 +239,13 @@ export default function TestStartPage({ params }: TestStartPageProps) {
   const handleNextQuestion = async () => {
     if (!testData) return;
     
+    // 단계 완료 화면에서의 다음 버튼 클릭 처리
+    if (testData.isStepCompleted) {
+      // 다음 단계의 데이터를 가져오기 위해 fetchTestData 호출
+      await fetchTestData();
+      return;
+    }
+    
     // 모든 문항에 답변했는지 확인
     const allQuestionsAnswered = testData.questions?.every(q => selectedAnswers[q.qu_code] !== undefined);
     
@@ -281,10 +289,26 @@ export default function TestStartPage({ params }: TestStartPageProps) {
         console.log('완료된 페이지:', data.completed_pages, '총 문항 수:', data.total_questions);
         
         // 테스트 완료 여부 확인
-        if (data.isCompleted) {
-          // 테스트 결과 페이지로 이동
+        if (data.isCompleted || data.isStepCompleted) {
+          // 현재 단계가 'tnd'(성향진단)이고 단계가 완료된 경우, 완료 화면 표시
+          if (testData.step === 'tnd') {
+            setTestData({
+              ...testData,
+              questions: [],
+              isStepCompleted: true
+            });
+            setIsSubmitting(false);
+            return;
+          }
+          
+          // 그 외의 경우 테스트 결과 페이지로 이동
           router.push(`/test-result/${testId}`);
           return;
+        }
+        
+        // 마지막 문항 구간에 도달한 경우 (완료 직전 상태)
+        if (data.isStepCompletingSoon && testData.step === 'tnd') {
+          console.log('성향 진단 마지막 문항 구간 도달');
         }
         
         // 다음 문항 데이터로 업데이트
@@ -595,6 +619,26 @@ export default function TestStartPage({ params }: TestStartPageProps) {
           ) : (
             <div className="text-center p-6 bg-gray-100 rounded-lg">
               <p>문항을 불러오는 중이거나 문항이 없습니다.</p>
+            </div>
+          )}
+
+          {testData && testData.isStepCompleted && (
+            <div className="space-y-8 text-center">
+              <div className="flex flex-col items-center p-12 bg-white rounded-lg shadow-sm border border-gray-200">
+                <div className="mb-6">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-20 w-20 text-green-500" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <h2 className="text-2xl font-bold mb-6">검사가 완료되었습니다.</h2>
+                <p className="text-lg mb-8">다음 검사를 진행하여 주십시오.</p>
+                <button
+                  onClick={handleNextQuestion}
+                  className={`px-6 py-3 text-white rounded-full hover:bg-opacity-90 ${theme.buttonBg}`}
+                >
+                  다음 <span className="ml-2">→</span>
+                </button>
+              </div>
             </div>
           )}
         </div>

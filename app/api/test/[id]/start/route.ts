@@ -196,7 +196,7 @@ export async function GET(
         qc.an_val ASC
     `;
 
-    console.log('문항 및 선택지 조회 결과:', JSON.stringify(questionsWithChoices, null, 2));
+    //console.log('문항 및 선택지 조회 결과:', JSON.stringify(questionsWithChoices, null, 2));
 
     // 문항과 선택지를 문항별로 그룹화
     interface QuestionChoice {
@@ -265,7 +265,7 @@ export async function GET(
       questions: questions
     };
 
-    console.log('최종 응답 데이터:', JSON.stringify(responseData, null, 2));
+    //console.log('최종 응답 데이터:', JSON.stringify(responseData, null, 2));
     return NextResponse.json(responseData);
 
   } catch (error) {
