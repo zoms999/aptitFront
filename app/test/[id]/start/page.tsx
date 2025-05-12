@@ -88,6 +88,24 @@ export default function TestStartPage({ params }: TestStartPageProps) {
     }
   }, [status, router, testId]);
 
+  // 테스트 데이터가 로드되었을 때 자동으로 답변 선택
+  useEffect(() => {
+    // 테스트 목적으로 답변 자동 선택 (성향 진단만 해당)
+    if (testData && testData.questions && testData.questions.length > 0 && testData.step === 'tnd') {
+      const autoAnswers: Record<string, number> = {};
+      
+      // 각 문항에 대해 임의의 답변 선택 (1~6 사이의 값)
+      testData.questions.forEach(question => {
+        // 임의의 답변 생성 (1~6 사이)
+        const randomAnswer = Math.floor(Math.random() * 6) + 1;
+        autoAnswers[question.qu_code] = randomAnswer;
+      });
+      
+      console.log('테스트용 답변 자동 선택:', autoAnswers);
+      setSelectedAnswers(autoAnswers);
+    }
+  }, [testData]);
+
   // 테스트 데이터 가져오기
   const fetchTestData = async () => {
     try {

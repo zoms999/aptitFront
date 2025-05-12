@@ -391,15 +391,16 @@ export async function POST(
     // 성향 진단(tnd) 단계의 마지막 페이지 완료 여부 체크
     if (!isCompleted && step === 'tnd') {
       const currentStep = Array.isArray(progressResult) && progressResult.length > 0 
-        ? (progressResult[0] as any).step
+        ? (progressResult[0] as { step: string }).step
         : '';
       
+      // BigInt 타입을 Number로 변환하여 처리
       const completedPages = Array.isArray(progressResult) && progressResult.length > 0 
-        ? (progressResult[0] as any).acnt 
+        ? Number((progressResult[0] as { acnt: bigint | number }).acnt)
         : 0;
       
       const totalQuestions = Array.isArray(progressResult) && progressResult.length > 0 
-        ? (progressResult[0] as any).tcnt 
+        ? Number((progressResult[0] as { tcnt: bigint | number }).tcnt)
         : 0;
         
       console.log(`TND 체크: 완료된 페이지 ${completedPages}, 총 문항 수 ${totalQuestions}`);
@@ -409,7 +410,7 @@ export async function POST(
         console.log('성향 진단 마지막 문항 완료됨, 점수 계산 준비');
         
         // 응답 데이터에 성향 진단 완료 플래그 추가
-        (responseData as any).isStepCompletingSoon = true;
+        (responseData as Record<string, unknown>).isStepCompletingSoon = true;
       }
       
       // 성향 진단의 모든 문항이 완료된 경우
@@ -473,7 +474,7 @@ export async function POST(
         console.log('성향 진단 점수 계산 및 다음 단계 업데이트 완료');
         
         // 응답 데이터에 성향 진단 완료 플래그 추가
-        (responseData as any).isStepCompleted = true;
+        (responseData as Record<string, unknown>).isStepCompleted = true;
       }
     }
 
