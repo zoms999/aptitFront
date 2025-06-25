@@ -25,8 +25,8 @@ model mwd_account {
   mwd_account_memo      mwd_account_memo?
   mwd_answer_progress   mwd_answer_progress[]
   mwd_choice_result     mwd_choice_result[]
-  mwd_log_account       mwd_log_account[]
-  mwd_log_login_account mwd_log_login_account[]
+  mwd_log_account       mwd_log_account[]        @ignore
+  mwd_log_login_account mwd_log_login_account[]  @ignore
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
@@ -39,7 +39,7 @@ model mwd_account_inquiry {
   ins_seq                   Int
   ai_reply                  String                      @db.Char(1)
   mwd_institute             mwd_institute               @relation(fields: [ins_seq], references: [ins_seq], onDelete: NoAction, onUpdate: NoAction)
-  mwd_account_inquiry_reply mwd_account_inquiry_reply[]
+  mwd_account_inquiry_reply mwd_account_inquiry_reply[] @ignore
 }
 
 /// The underlying table does not contain a valid unique identifier and can therefore currently not be handled by Prisma Client.
@@ -90,7 +90,7 @@ model mwd_answer_progress {
   mwd_account         mwd_account           @relation(fields: [ac_gid], references: [ac_gid], onDelete: NoAction, onUpdate: NoAction)
   mwd_choice_result   mwd_choice_result     @relation(fields: [ac_gid, cr_seq], references: [ac_gid, cr_seq], onDelete: NoAction, onUpdate: NoAction, map: "mwd_answer_progress_ac_gid_fkey1")
   mwd_question        mwd_question          @relation(fields: [qu_code], references: [qu_code], onDelete: NoAction, onUpdate: NoAction)
-  mwd_log_view_result mwd_log_view_result[]
+  mwd_log_view_result mwd_log_view_result[] @ignore
   mwd_resduty         mwd_resduty[]
   mwd_resjob          mwd_resjob[]
   mwd_resval          mwd_resval?
@@ -230,7 +230,7 @@ model mwd_institute_turn {
   tur_req_sum          Int
   tur_use_sum          Int
   tur_code             String                 @db.VarChar(30)
-  mwd_institute_member mwd_institute_member[]
+  mwd_institute_member mwd_institute_member[] @ignore
   mwd_institute        mwd_institute          @relation(fields: [ins_seq], references: [ins_seq], onDelete: NoAction, onUpdate: NoAction, map: "mwd_institute_turn_fk")
 
   @@id([ins_seq, tur_seq], map: "mwd_institute_turn_pk")
@@ -353,10 +353,10 @@ model mwd_manager {
   mg_grant_statistic        Int                         @db.SmallInt
   mg_grant_inquiry          Int                         @db.SmallInt
   mg_grant_institute        Int                         @db.SmallInt
-  mwd_account_inquiry_reply mwd_account_inquiry_reply[]
-  mwd_log_login_manager     mwd_log_login_manager[]
-  mwd_log_manager           mwd_log_manager[]
-  mwd_log_view_result       mwd_log_view_result[]
+  mwd_account_inquiry_reply mwd_account_inquiry_reply[] @ignore
+  mwd_log_login_manager     mwd_log_login_manager[]     @ignore
+  mwd_log_manager           mwd_log_manager[]           @ignore
+  mwd_log_view_result       mwd_log_view_result[]       @ignore
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
@@ -382,7 +382,7 @@ model mwd_person {
   pe_school_year       String                 @db.VarChar(10)
   pe_job_name          String                 @db.VarChar(50)
   pe_job_detail        String                 @db.VarChar(100)
-  mwd_institute_member mwd_institute_member[]
+  mwd_institute_member mwd_institute_member[] @ignore
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
@@ -420,6 +420,63 @@ model mwd_question {
   mwd_answer          mwd_answer[]
   mwd_answer_progress mwd_answer_progress[]
   mwd_image_job_map   mwd_image_job_map[]
+  mwd_question_lang   mwd_question_lang[]
+  mwd_question_asset  mwd_question_asset[]
+  mwd_question_choice mwd_question_choice[]
+}
+
+/// 질문의 언어별 텍스트, 해설, 카테고리명
+model mwd_question_lang {
+  qu_code     String       @db.Char(8)
+  lang_code   String       @db.VarChar(5) // 'ko-KR', 'en-US' 등
+  qu_text     String?      @db.Text
+  qu_explain  String?      @db.Text
+  qu_category String?      @db.VarChar(50)
+  mwd_question mwd_question @relation(fields: [qu_code], references: [qu_code], onDelete: Cascade)
+
+  @@id([qu_code, lang_code])
+}
+
+/// 질문에 속한 이미지 자산의 존재와 순서를 정의
+model mwd_question_asset {
+  asset_id      Int                        @id @default(autoincrement())
+  qu_code       String                     @db.Char(8)
+  display_order Int                        @default(0)
+  mwd_question  mwd_question               @relation(fields: [qu_code], references: [qu_code], onDelete: Cascade)
+  mwd_question_asset_lang mwd_question_asset_lang[]
+}
+
+/// 질문 자산의 언어별 이미지 경로
+model mwd_question_asset_lang {
+  asset_id     Int                  @db.Integer
+  lang_code    String               @db.VarChar(5)
+  image_path   String               @db.Text
+  mwd_question_asset mwd_question_asset @relation(fields: [asset_id], references: [asset_id], onDelete: Cascade)
+
+  @@id([asset_id, lang_code])
+}
+
+/// 질문 선택지의 순서와 가중치 등 언어 독립적인 정보
+model mwd_question_choice {
+  choice_id     Int                         @id @default(autoincrement())
+  qu_code       String                      @db.Char(8)
+  display_order Int
+  weight        Int                         @default(0)
+  mwd_question  mwd_question                @relation(fields: [qu_code], references: [qu_code], onDelete: Cascade)
+  mwd_question_choice_lang mwd_question_choice_lang[]
+}
+
+/// 질문 선택지의 언어별 텍스트 또는 이미지 경로
+model mwd_question_choice_lang {
+  choice_id         Int                    @db.Integer
+  lang_code         String                 @db.VarChar(5)
+  choice_text       String?                @db.Text          // 텍스트 보기일 경우
+  choice_image_path String?                @db.Text          // 이미지 보기일 경우
+  choice_desc       String?                @db.Text          // 선택지 설명
+  choice_sub        String?                @db.Text          // 하위 설명
+  mwd_question_choice mwd_question_choice  @relation(fields: [choice_id], references: [choice_id], onDelete: Cascade)
+
+  @@id([choice_id, lang_code])
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments

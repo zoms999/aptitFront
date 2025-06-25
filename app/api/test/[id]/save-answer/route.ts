@@ -5,7 +5,7 @@ import { authOptions } from '../../../../../lib/auth';
 
 export async function POST(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     // 로그인 세션 확인
@@ -15,8 +15,15 @@ export async function POST(
       return NextResponse.json({ error: '로그인이 필요합니다' }, { status: 401 });
     }
 
+    // 언어 정보 추출
+    const acceptLanguage = request.headers.get('Accept-Language') || 'ko-KR';
+    const language = ['ko-KR', 'en-US', 'ja-JP', 'zh-CN'].includes(acceptLanguage) 
+      ? acceptLanguage 
+      : 'ko-KR';
+
     // params를 비동기적으로 처리
-    const testId = parseInt(params.id, 10);
+    const resolvedParams = await params;
+    const testId = parseInt(resolvedParams.id, 10);
 
     if (isNaN(testId)) {
       return NextResponse.json({ error: '유효하지 않은 테스트 ID입니다' }, { status: 400 });
@@ -55,7 +62,7 @@ export async function POST(
       WHERE anp_seq = ${anp_seq}::integer
     `;
 
-    // 3. 다음 질문 추출
+    // 3. 현재 단계 완료 여부 확인 및 다음 질문 추출
     const nextQuestionResult = await prisma.$queryRaw`
       WITH progress_list AS (
           SELECT  
@@ -78,7 +85,9 @@ export async function POST(
           LEFT JOIN mwd_question_attr qa ON qa.qua_code = 
               CASE WHEN qu.qu_kind1 = 'img' THEN qu.qu_kind3 ELSE qu.qu_kind2 END
           WHERE ap.anp_seq = ${anp_seq}::integer
-            AND (CASE WHEN cr.pd_kind = 'basic' THEN qu.qu_kind1 != 'thk' ELSE TRUE END)
+            AND qu.qu_kind1 = (SELECT anp_step FROM mwd_answer_progress WHERE anp_seq = ${anp_seq}::integer)
+            AND qu.qu_filename NOT LIKE '%Index%'
+            AND qu.qu_filename NOT LIKE '%index%'
       ),
       plist AS (
           SELECT 
@@ -105,8 +114,159 @@ export async function POST(
     `;
 
     let nextQuestion = null;
+    let isStepCompleted = false;
+    
     if (Array.isArray(nextQuestionResult) && nextQuestionResult.length > 0) {
       nextQuestion = nextQuestionResult[0];
+    } else {
+      // 현재 단계에서 다음 질문이 없는 경우, 단계 완료 확인
+      console.log('현재 단계에서 다음 질문이 없음. 단계 완료 여부 확인 중...');
+      
+      // 성향 진단(tnd) 완료 후 사고력 진단(thk)으로 전환
+      if (step === 'tnd') {
+        console.log('성향 진단 완료. 사고력 진단으로 전환 시도...');
+        
+        // 사고력 진단의 첫 번째 문항 조회
+        const thinkingQuestionResult = await prisma.$queryRaw`
+          SELECT 
+              qu.qu_filename, 
+              qu.qu_code, 
+              qu.qu_kind1 AS step,
+              'tnd' AS prev_step,
+              qu.qu_action, 
+              ${qu_code} AS prev_code, 
+              COALESCE(qa.qua_type, '-') AS qua_type, 
+              cr.pd_kind
+          FROM mwd_question qu
+          JOIN mwd_choice_result cr ON cr.cr_seq = (
+              SELECT cr_seq FROM mwd_answer_progress WHERE anp_seq = ${anp_seq}::integer
+          )
+          LEFT JOIN mwd_question_attr qa ON qa.qua_code = 
+              CASE WHEN qu.qu_kind1 = 'img' THEN qu.qu_kind3 ELSE qu.qu_kind2 END
+          WHERE qu.qu_use = 'Y'
+            AND qu.qu_kind1 = 'thk'
+            AND qu.qu_filename NOT LIKE '%Index%'
+            AND qu.qu_filename NOT LIKE '%index%'
+          ORDER BY qu.qu_order
+          LIMIT 1
+        `;
+        
+        if (Array.isArray(thinkingQuestionResult) && thinkingQuestionResult.length > 0) {
+          nextQuestion = thinkingQuestionResult[0];
+          console.log('사고력 진단 첫 문항 찾음:', nextQuestion);
+          
+          // answer_progress의 단계를 사고력 진단으로 업데이트
+          await prisma.$queryRaw`
+            UPDATE mwd_answer_progress
+            SET anp_step = 'thk',
+                qu_code = ${nextQuestion.qu_code}
+            WHERE anp_seq = ${anp_seq}::integer
+          `;
+          
+          console.log('answer_progress 테이블 업데이트 완료: anp_step=thk, qu_code=', nextQuestion.qu_code);
+        } else {
+          isStepCompleted = true;
+          console.log('성향 진단 완료 - 사고력 진단 문항 없음');
+        }
+      } else if (step === 'thk') {
+        // 사고력 진단에서 현재 파일명의 문제가 완료되면 다음 파일명의 문제로 진행
+        console.log('사고력 진단에서 다음 파일명의 문제 조회 시도...');
+        
+        // 현재 문제의 파일명 가져오기
+        const currentFilenameResult = await prisma.$queryRaw`
+          SELECT qu_filename FROM mwd_question WHERE qu_code = ${qu_code} AND qu_use = 'Y'
+        `;
+        
+        let currentFilename = '';
+        if (Array.isArray(currentFilenameResult) && currentFilenameResult.length > 0) {
+          currentFilename = currentFilenameResult[0].qu_filename;
+        }
+        
+        // 사고력 진단의 다음 파일명 문제 조회
+        const nextThinkingQuestionResult = await prisma.$queryRaw`
+          SELECT 
+              qu.qu_filename, 
+              qu.qu_code, 
+              qu.qu_kind1 AS step,
+              'thk' AS prev_step,
+              qu.qu_action, 
+              ${qu_code} AS prev_code, 
+              COALESCE(qa.qua_type, '-') AS qua_type, 
+              cr.pd_kind
+          FROM mwd_question qu
+          JOIN mwd_choice_result cr ON cr.cr_seq = (
+              SELECT cr_seq FROM mwd_answer_progress WHERE anp_seq = ${anp_seq}::integer
+          )
+          LEFT JOIN mwd_question_attr qa ON qa.qua_code = 
+              CASE WHEN qu.qu_kind1 = 'img' THEN qu.qu_kind3 ELSE qu.qu_kind2 END
+          WHERE qu.qu_use = 'Y'
+            AND qu.qu_kind1 = 'thk'
+            AND qu.qu_filename NOT LIKE '%Index%'
+            AND qu.qu_filename NOT LIKE '%index%'
+            AND qu.qu_filename > ${currentFilename}
+          ORDER BY qu.qu_filename, qu.qu_order
+          LIMIT 1
+        `;
+        
+        if (Array.isArray(nextThinkingQuestionResult) && nextThinkingQuestionResult.length > 0) {
+          nextQuestion = nextThinkingQuestionResult[0];
+          console.log('사고력 진단 다음 파일명 문항 찾음:', nextQuestion);
+          
+          // answer_progress 업데이트
+          await prisma.$queryRaw`
+            UPDATE mwd_answer_progress
+            SET qu_code = ${nextQuestion.qu_code}
+            WHERE anp_seq = ${anp_seq}::integer
+          `;
+        } else {
+          // 사고력 진단 완료 후 선호도 진단(img)으로 전환
+          console.log('사고력 진단 완료. 선호도 진단으로 전환 시도...');
+          
+          const preferenceQuestionResult = await prisma.$queryRaw`
+            SELECT 
+                qu.qu_filename, 
+                qu.qu_code, 
+                qu.qu_kind1 AS step,
+                'thk' AS prev_step,
+                qu.qu_action, 
+                ${qu_code} AS prev_code, 
+                COALESCE(qa.qua_type, '-') AS qua_type, 
+                cr.pd_kind
+            FROM mwd_question qu
+            JOIN mwd_choice_result cr ON cr.cr_seq = (
+                SELECT cr_seq FROM mwd_answer_progress WHERE anp_seq = ${anp_seq}::integer
+            )
+            LEFT JOIN mwd_question_attr qa ON qa.qua_code = 
+                CASE WHEN qu.qu_kind1 = 'img' THEN qu.qu_kind3 ELSE qu.qu_kind2 END
+            WHERE qu.qu_use = 'Y'
+              AND qu.qu_kind1 = 'img'
+              AND qu.qu_filename NOT LIKE '%Index%'
+              AND qu.qu_filename NOT LIKE '%index%'
+            ORDER BY qu.qu_order
+            LIMIT 1
+          `;
+          
+          if (Array.isArray(preferenceQuestionResult) && preferenceQuestionResult.length > 0) {
+            nextQuestion = preferenceQuestionResult[0];
+            console.log('선호도 진단 첫 문항 찾음:', nextQuestion);
+            
+            // answer_progress의 단계를 선호도 진단으로 업데이트
+            await prisma.$queryRaw`
+              UPDATE mwd_answer_progress
+              SET anp_step = 'img',
+                  qu_code = ${nextQuestion.qu_code}
+              WHERE anp_seq = ${anp_seq}::integer
+            `;
+          } else {
+            isStepCompleted = true;
+            console.log('사고력 진단 완료 - 선호도 진단 문항 없음');
+          }
+        }
+      } else {
+        // 모든 단계 완료
+        isStepCompleted = true;
+        console.log('모든 단계 완료');
+      }
     }
 
     // 4. 완료율 계산
@@ -133,8 +293,8 @@ export async function POST(
         JOIN current_progress_details cpd ON qu.qu_kind1 = cpd.anp_step -- 현재 단계의 문제만 필터링
         WHERE qu.qu_use = 'Y'
           AND qu.qu_qusyn = 'Y' -- 사용자의 "총문제수" 예시 쿼리 조건
-          -- pd_kind에 따른 필터링
-          AND (CASE WHEN cpd.pd_kind = 'basic' THEN qu.qu_kind1 != 'thk' ELSE TRUE END)
+          -- pd_kind에 따른 필터링 제거 (모든 단계 포함)
+          AND TRUE
         GROUP BY cpd.anp_step
     ),
     answered_questions_for_step AS (
@@ -148,7 +308,7 @@ export async function POST(
           AND an.an_ex >= 0
           AND qu.qu_use = 'Y'
           AND qu.qu_qusyn = 'Y'
-          AND (CASE WHEN cpd.pd_kind = 'basic' THEN qu.qu_kind1 != 'thk' ELSE TRUE END)
+          AND TRUE
     )
     SELECT
         COALESCE(tqs.tcnt, 0) AS tcnt,
@@ -190,6 +350,8 @@ export async function POST(
       an_desc: string | null;
       an_sub: string | null;
       an_wei: number;
+      choice_image_path?: string;
+      qu_image?: string;
     }
 
     interface Question {
@@ -199,43 +361,181 @@ export async function POST(
       qu_text: string;
       qu_category: string;
       qu_action: string;
+      qu_image?: string;
+      qu_images?: string[];
       choices: Array<{
         an_val: number;
         an_text: string;
         an_desc: string | null;
         an_sub: string | null;
         an_wei: number;
+        choice_image_path?: string;
       }>;
     }
 
     const questions: Question[] = [];
     
     if (questionFilename) {
-      const questionsWithChoices = await prisma.$queryRaw`
-        SELECT
-          q.qu_code,
-          q.qu_filename,
-          q.qu_order,
-          q.qu_text,
-          q.qu_category,
-          q.qu_action,
-          qc.an_val,
-          qc.an_text,
-          qc.an_desc,
-          qc.an_sub,
-          qc.an_wei
-        FROM
-          mwd_question q
-        JOIN
-          mwd_question_choice qc ON q.qu_code = qc.qu_code
-        WHERE
-          q.qu_filename = ${questionFilename}
-          AND q.qu_use = 'Y'
-          AND qc.an_use = 'Y'
-        ORDER BY
-          q.qu_order ASC,
-          qc.an_val ASC
-      `;
+      // 다국어 테이블이 존재하는지 확인하고, 없으면 기존 방식 사용
+      let questionsWithChoices;
+      try {
+        // 먼저 다국어 테이블을 사용한 쿼리 시도
+                  questionsWithChoices = await prisma.$queryRaw`
+            SELECT
+              q.qu_code,
+              q.qu_filename,
+              q.qu_order,
+              ql.qu_text,
+              ql.qu_category,
+              q.qu_action,
+              qc.display_order as an_val,
+              CASE 
+                WHEN qc.display_order = 1 THEN '매우 그렇다'
+                WHEN qc.display_order = 2 THEN '그렇다'
+                WHEN qc.display_order = 3 THEN '약간 그렇다'
+                WHEN qc.display_order = 4 THEN '별로 그렇지 않다'
+                WHEN qc.display_order = 5 THEN '그렇지 않다'
+                WHEN qc.display_order = 6 THEN '전혀 그렇지 않다'
+                ELSE '선택지'
+              END as an_text,
+              null as an_desc,
+              null as an_sub,
+              qc.weight as an_wei,
+              null as choice_image_path,
+              null as qu_image
+            FROM
+              mwd_question q
+            JOIN
+              mwd_question_lang ql ON q.qu_code = ql.qu_code
+            JOIN
+              mwd_question_choice qc ON q.qu_code = qc.qu_code
+            WHERE
+              q.qu_filename = ${questionFilename}
+              AND q.qu_use = 'Y'
+              AND ql.lang_code = ${language}
+            ORDER BY
+              q.qu_order ASC,
+              qc.display_order ASC
+          `;
+      } catch (error) {
+        console.log('다국어 테이블 쿼리 실패, 기존 방식으로 폴백:', error);
+        // 기존 방식으로 폴백
+        questionsWithChoices = await prisma.$queryRaw`
+          SELECT
+            q.qu_code,
+            q.qu_filename,
+            q.qu_order,
+            COALESCE(q.qu_explain, '질문 텍스트') as qu_text,
+            'default' as qu_category,
+            q.qu_action,
+            1 as an_val,
+            '매우 그렇다' as an_text,
+            null as an_desc,
+            null as an_sub,
+            q.qu_ex1wei as an_wei,
+            null as choice_image_path,
+            null as qu_image
+          FROM mwd_question q
+          WHERE q.qu_filename = ${questionFilename} AND q.qu_use = 'Y'
+          
+          UNION ALL
+          
+          SELECT
+            q.qu_code,
+            q.qu_filename,
+            q.qu_order,
+            COALESCE(q.qu_explain, '질문 텍스트') as qu_text,
+            'default' as qu_category,
+            q.qu_action,
+            2 as an_val,
+            '그렇다' as an_text,
+            null as an_desc,
+            null as an_sub,
+            q.qu_ex2wei as an_wei,
+            null as choice_image_path,
+            null as qu_image
+          FROM mwd_question q
+          WHERE q.qu_filename = ${questionFilename} AND q.qu_use = 'Y'
+          
+          UNION ALL
+          
+          SELECT
+            q.qu_code,
+            q.qu_filename,
+            q.qu_order,
+            COALESCE(q.qu_explain, '질문 텍스트') as qu_text,
+            'default' as qu_category,
+            q.qu_action,
+            3 as an_val,
+            '약간 그렇다' as an_text,
+            null as an_desc,
+            null as an_sub,
+            q.qu_ex3wei as an_wei,
+            null as choice_image_path,
+            null as qu_image
+          FROM mwd_question q
+          WHERE q.qu_filename = ${questionFilename} AND q.qu_use = 'Y'
+          
+          UNION ALL
+          
+          SELECT
+            q.qu_code,
+            q.qu_filename,
+            q.qu_order,
+            COALESCE(q.qu_explain, '질문 텍스트') as qu_text,
+            'default' as qu_category,
+            q.qu_action,
+            4 as an_val,
+            '별로 그렇지 않다' as an_text,
+            null as an_desc,
+            null as an_sub,
+            q.qu_ex4wei as an_wei,
+            null as choice_image_path,
+            null as qu_image
+          FROM mwd_question q
+          WHERE q.qu_filename = ${questionFilename} AND q.qu_use = 'Y'
+          
+          UNION ALL
+          
+          SELECT
+            q.qu_code,
+            q.qu_filename,
+            q.qu_order,
+            COALESCE(q.qu_explain, '질문 텍스트') as qu_text,
+            'default' as qu_category,
+            q.qu_action,
+            5 as an_val,
+            '그렇지 않다' as an_text,
+            null as an_desc,
+            null as an_sub,
+            q.qu_ex5wei as an_wei,
+            null as choice_image_path,
+            null as qu_image
+          FROM mwd_question q
+          WHERE q.qu_filename = ${questionFilename} AND q.qu_use = 'Y'
+          
+          UNION ALL
+          
+          SELECT
+            q.qu_code,
+            q.qu_filename,
+            q.qu_order,
+            COALESCE(q.qu_explain, '질문 텍스트') as qu_text,
+            'default' as qu_category,
+            q.qu_action,
+            6 as an_val,
+            '전혀 그렇지 않다' as an_text,
+            null as an_desc,
+            null as an_sub,
+            q.qu_ex6wei as an_wei,
+            null as choice_image_path,
+            null as qu_image
+          FROM mwd_question q
+          WHERE q.qu_filename = ${questionFilename} AND q.qu_use = 'Y'
+          
+          ORDER BY qu_order ASC, an_val ASC
+        `;
+      }
 
       // 문항과 선택지를 문항별로 그룹화
       const questionMap = new Map<string, Question>();
@@ -250,17 +550,28 @@ export async function POST(
               qu_text: row.qu_text,
               qu_category: row.qu_category,
               qu_action: row.qu_action,
+              qu_image: row.qu_image,
+              qu_images: row.qu_image ? [row.qu_image] : [],
               choices: []
             });
             questions.push(questionMap.get(row.qu_code)!);
           }
           
-          questionMap.get(row.qu_code)!.choices.push({
+          const question = questionMap.get(row.qu_code)!;
+          
+          // 이미지가 있고 이미 추가되지 않은 경우 추가
+          if (row.qu_image && !question.qu_images?.includes(row.qu_image)) {
+            question.qu_images = question.qu_images || [];
+            question.qu_images.push(row.qu_image);
+          }
+          
+          question.choices.push({
             an_val: row.an_val,
             an_text: row.an_text,
             an_desc: row.an_desc,
             an_sub: row.an_sub,
-            an_wei: row.an_wei
+            an_wei: row.an_wei,
+            choice_image_path: row.choice_image_path
           });
         });
       }
@@ -268,86 +579,16 @@ export async function POST(
 
     // 완료 상태 확인
     const isCompleted = !nextQuestion;
+    
+    // 전체 테스트 완료 시에만 기본 완료 처리
     if (isCompleted) {
-      // 현재 단계 정보 가져오기
-      const currentStepResult = await prisma.$queryRaw`
-        SELECT anp_step FROM mwd_answer_progress WHERE anp_seq = ${anp_seq}::integer
+      await prisma.$queryRaw`
+        UPDATE mwd_answer_progress
+        SET anp_done = 'E',
+            anp_end_date = NOW()
+        WHERE anp_seq = ${anp_seq}::integer
       `;
-      
-      const currentStep = Array.isArray(currentStepResult) && currentStepResult.length > 0 
-        ? (currentStepResult[0] as { anp_step: string }).anp_step 
-        : '';
-        
-      console.log('현재 단계:', currentStep);
-      
-      // 성향 진단(tnd) 단계가 완료된 경우, 성향 점수 계산 후 저장
-      if (currentStep === 'tnd') {
-        console.log('성향 진단 단계 완료됨, 점수 계산 시작');
-        
-        // 1. 기존 점수 데이터 삭제
-        await prisma.$queryRaw`
-          DELETE FROM mwd_score1 
-          WHERE anp_seq = ${anp_seq}::integer 
-          AND sc1_step = 'tnd'
-        `;
-        
-        // 2. 새로운 점수 데이터 계산 및 삽입
-        await prisma.$queryRaw`
-          INSERT INTO mwd_score1 
-          (anp_seq, sc1_step, qua_code, sc1_score, sc1_rate, sc1_rank, sc1_qcnt) 
-          SELECT 
-            ${anp_seq}::integer AS anpseq, 
-            'tnd' AS tnd, 
-            qua_code, 
-            score, 
-            rate, 
-            row_number() OVER (ORDER BY rate DESC, fcnt DESC, ocnt), 
-            cnt 
-          FROM (
-            SELECT 
-              qa.qua_code, 
-              sum(an.an_wei) AS score, 
-              round(cast(sum(an.an_wei) AS numeric)/cast(qa.qua_totalscore AS numeric),3) AS rate, 
-              count(*) AS cnt, 
-              cast(sum(CASE WHEN an.an_wei = 5 THEN 1 ELSE 0 END) AS numeric) AS fcnt, 
-              cast(sum(CASE WHEN an.an_wei = 1 THEN 1 ELSE 0 END) AS numeric) AS ocnt 
-            FROM 
-              mwd_answer an, 
-              mwd_question qu, 
-              mwd_question_attr qa 
-            WHERE 
-              an.anp_seq = ${anp_seq}::integer 
-              AND qu.qu_code = an.qu_code 
-              AND qu.qu_qusyn = 'Y' 
-              AND qu.qu_use = 'Y' 
-              AND qu.qu_kind1 = 'tnd' 
-              AND qa.qua_code = qu.qu_kind2 
-              AND an.an_ex > 0 
-              AND an.an_progress > 0 
-            GROUP BY 
-              qa.qua_code, qa.qua_totalscore
-          ) AS t1
-        `;
-        
-        // 3. 다음 단계(사고력 진단)로 업데이트
-        await prisma.$queryRaw`
-          UPDATE mwd_answer_progress 
-          SET qu_code = 'thk00000', 
-              anp_done = 'I', 
-              anp_step = 'thk' 
-          WHERE anp_seq = ${anp_seq}::integer
-        `;
-        
-        console.log('성향 진단 점수 계산 및 다음 단계 업데이트 완료');
-      } else {
-        // 그 외 단계에서는 기본 완료 처리
-        await prisma.$queryRaw`
-          UPDATE mwd_answer_progress
-          SET anp_done = 'E',
-              anp_end_date = NOW()
-          WHERE anp_seq = ${anp_seq}::integer
-        `;
-      }
+      console.log('전체 테스트 완료 처리됨');
     }
 
     // BigInt 직렬화 오류 해결을 위한 헬퍼 함수
@@ -380,6 +621,7 @@ export async function POST(
       success: true,
       anp_seq: anp_seq,
       isCompleted,
+      isStepCompleted,
       nextQuestion,
       progress: Array.isArray(progressResult) && progressResult.length > 0 ? progressResult[0] : null,
       questions,
@@ -388,12 +630,8 @@ export async function POST(
       total_questions: Array.isArray(progressResult) && progressResult.length > 0 ? progressResult[0].tcnt : 0
     });
 
-    // 성향 진단(tnd) 단계의 마지막 페이지 완료 여부 체크
-    if (!isCompleted && step === 'tnd') {
-      const currentStep = Array.isArray(progressResult) && progressResult.length > 0 
-        ? (progressResult[0] as { step: string }).step
-        : '';
-      
+    // 현재 단계 완료 여부 최종 확인 (모든 단계에 대해)
+    if (!isCompleted && !isStepCompleted) {
       // BigInt 타입을 Number로 변환하여 처리
       const completedPages = Array.isArray(progressResult) && progressResult.length > 0 
         ? Number((progressResult[0] as { acnt: bigint | number }).acnt)
@@ -403,78 +641,126 @@ export async function POST(
         ? Number((progressResult[0] as { tcnt: bigint | number }).tcnt)
         : 0;
         
-      console.log(`TND 체크: 완료된 페이지 ${completedPages}, 총 문항 수 ${totalQuestions}`);
+      console.log(`단계 완료 체크 (${step}): 완료된 페이지 ${completedPages}, 총 문항 수 ${totalQuestions}`);
       
-      // 성향 진단 단계의 마지막 5개 문항을 제외한 모든 문항이 완료된 경우
-      if (currentStep === 'tnd' && completedPages >= totalQuestions - 5) {
-        console.log('성향 진단 마지막 문항 완료됨, 점수 계산 준비');
+      // 현재 단계의 모든 문항이 완료된 경우
+      if (completedPages >= totalQuestions) {
+        console.log(`${step} 단계 모든 문항 완료됨, 다음 단계 전환 시작`);
         
-        // 응답 데이터에 성향 진단 완료 플래그 추가
-        (responseData as Record<string, unknown>).isStepCompletingSoon = true;
-      }
-      
-      // 성향 진단의 모든 문항이 완료된 경우
-      if (currentStep === 'tnd' && completedPages >= totalQuestions) {
-        console.log('성향 진단 모든 문항 완료됨, 점수 계산 시작');
-        
-        // 1. 기존 점수 데이터 삭제
-        await prisma.$queryRaw`
-          DELETE FROM mwd_score1 
-          WHERE anp_seq = ${anp_seq}::integer 
-          AND sc1_step = 'tnd'
-        `;
-        
-        // 2. 새로운 점수 데이터 계산 및 삽입
-        await prisma.$queryRaw`
-          INSERT INTO mwd_score1 
-          (anp_seq, sc1_step, qua_code, sc1_score, sc1_rate, sc1_rank, sc1_qcnt) 
-          SELECT 
-            ${anp_seq}::integer AS anpseq, 
-            'tnd' AS tnd, 
-            qua_code, 
-            score, 
-            rate, 
-            row_number() OVER (ORDER BY rate DESC, fcnt DESC, ocnt), 
-            cnt 
-          FROM (
-            SELECT 
-              qa.qua_code, 
-              sum(an.an_wei) AS score, 
-              round(cast(sum(an.an_wei) AS numeric)/cast(qa.qua_totalscore AS numeric),3) AS rate, 
-              count(*) AS cnt, 
-              cast(sum(CASE WHEN an.an_wei = 5 THEN 1 ELSE 0 END) AS numeric) AS fcnt, 
-              cast(sum(CASE WHEN an.an_wei = 1 THEN 1 ELSE 0 END) AS numeric) AS ocnt 
-            FROM 
-              mwd_answer an, 
-              mwd_question qu, 
-              mwd_question_attr qa 
-            WHERE 
-              an.anp_seq = ${anp_seq}::integer 
-              AND qu.qu_code = an.qu_code 
-              AND qu.qu_qusyn = 'Y' 
-              AND qu.qu_use = 'Y' 
-              AND qu.qu_kind1 = 'tnd' 
-              AND qa.qua_code = qu.qu_kind2 
-              AND an.an_ex > 0 
-              AND an.an_progress > 0 
-            GROUP BY 
-              qa.qua_code, qa.qua_totalscore
-          ) AS t1
-        `;
-        
-        // 3. 다음 단계(사고력 진단)로 업데이트
-        await prisma.$queryRaw`
-          UPDATE mwd_answer_progress 
-          SET qu_code = 'thk00000', 
-              anp_done = 'I', 
-              anp_step = 'thk' 
-          WHERE anp_seq = ${anp_seq}::integer
-        `;
-        
-        console.log('성향 진단 점수 계산 및 다음 단계 업데이트 완료');
-        
-        // 응답 데이터에 성향 진단 완료 플래그 추가
-        (responseData as Record<string, unknown>).isStepCompleted = true;
+        try {
+          if (step === 'tnd') {
+            // 성향 진단 완료 처리
+            console.log('성향 진단 점수 계산 시작');
+            
+            // 1. 기존 점수 데이터 삭제
+            await prisma.$queryRaw`
+              DELETE FROM mwd_score1 
+              WHERE anp_seq = ${anp_seq}::integer 
+              AND sc1_step = 'tnd'
+            `;
+            
+            // 2. 새로운 점수 데이터 계산 및 삽입
+            await prisma.$queryRaw`
+              INSERT INTO mwd_score1 
+              (anp_seq, sc1_step, qua_code, sc1_score, sc1_rate, sc1_rank, sc1_qcnt) 
+              SELECT 
+                ${anp_seq}::integer AS anpseq, 
+                'tnd' AS tnd, 
+                qua_code, 
+                score, 
+                rate, 
+                row_number() OVER (ORDER BY rate DESC, fcnt DESC, ocnt), 
+                cnt 
+              FROM (
+                SELECT 
+                  qa.qua_code, 
+                  sum(an.an_wei) AS score, 
+                  round(cast(sum(an.an_wei) AS numeric)/cast(qa.qua_totalscore AS numeric),3) AS rate, 
+                  count(*) AS cnt, 
+                  cast(sum(CASE WHEN an.an_wei = 5 THEN 1 ELSE 0 END) AS numeric) AS fcnt, 
+                  cast(sum(CASE WHEN an.an_wei = 1 THEN 1 ELSE 0 END) AS numeric) AS ocnt 
+                FROM 
+                  mwd_answer an, 
+                  mwd_question qu, 
+                  mwd_question_attr qa 
+                WHERE 
+                  an.anp_seq = ${anp_seq}::integer 
+                  AND qu.qu_code = an.qu_code 
+                  AND qu.qu_qusyn = 'Y' 
+                  AND qu.qu_use = 'Y' 
+                  AND qu.qu_kind1 = 'tnd' 
+                  AND qa.qua_code = qu.qu_kind2 
+                  AND an.an_ex > 0 
+                  AND an.an_progress > 0 
+                GROUP BY 
+                  qa.qua_code, qa.qua_totalscore
+              ) AS t1
+            `;
+            
+            // 3. 다음 단계(사고력 진단)로 업데이트
+            await prisma.$queryRaw`
+              UPDATE mwd_answer_progress 
+              SET qu_code = 'thk00000', 
+                  anp_done = 'I', 
+                  anp_step = 'thk' 
+              WHERE anp_seq = ${anp_seq}::integer
+            `;
+            
+            console.log('성향 진단 점수 계산 및 사고력 진단 단계로 업데이트 완료');
+            
+          } else if (step === 'thk') {
+            // 사고력 진단 완료 처리 - 선호도 진단으로 전환
+            await prisma.$queryRaw`
+              UPDATE mwd_answer_progress 
+              SET qu_code = 'img00000', 
+                  anp_done = 'I', 
+                  anp_step = 'img' 
+              WHERE anp_seq = ${anp_seq}::integer
+            `;
+            
+            console.log('사고력 진단 완료, 선호도 진단 단계로 업데이트 완료');
+            
+          } else if (step === 'img') {
+            // 선호도 진단 완료 처리 - 전체 테스트 완료
+            await prisma.$queryRaw`
+              UPDATE mwd_answer_progress 
+              SET anp_done = 'E', 
+                  anp_end_date = NOW() 
+              WHERE anp_seq = ${anp_seq}::integer
+            `;
+            
+            console.log('선호도 진단 완료, 전체 테스트 완료 처리됨');
+          }
+          
+          // 응답 데이터에 단계 완료 플래그 및 다음 단계 정보 추가
+          (responseData as Record<string, unknown>).isStepCompleted = true;
+          
+          // 다음 단계 정보 설정
+          let nextStepInfo = null;
+          if (step === 'tnd') {
+            nextStepInfo = {
+              step: 'thk',
+              qu_code: 'thk00000',
+              qu_filename: 'thk00000',
+              prev_step: 'tnd'
+            };
+          } else if (step === 'thk') {
+            nextStepInfo = {
+              step: 'img',
+              qu_code: 'img00000', 
+              qu_filename: 'img00000',
+              prev_step: 'thk'
+            };
+          }
+          
+          if (nextStepInfo) {
+            (responseData as Record<string, unknown>).nextQuestion = nextStepInfo;
+            console.log(`다음 단계 정보 설정: ${step} -> ${nextStepInfo.step}`);
+          }
+          
+        } catch (error) {
+          console.error(`${step} 단계 완료 처리 중 오류:`, error);
+        }
       }
     }
 

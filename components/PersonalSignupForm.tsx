@@ -53,7 +53,7 @@ const PersonalSignupForm: React.FC = () => {
       companyName: '테스트 주식회사',
       jobDescription: '웹 개발자',
       username: 'testuser',
-      password: 'test123',
+      password: '111111',
       agreeTerms: true,
       agreePrivacy: true,
       agreeMarketing: true,

@@ -17,7 +17,7 @@ interface UserSession {
 
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -27,8 +27,11 @@ export async function GET(
       return NextResponse.json({ error: '인증되지 않았습니다.' }, { status: 401 });
     }
     
+    // params 해결
+    const resolvedParams = await params;
+    
     // 파라미터 검증
-    const testId = params.id;
+    const testId = resolvedParams.id;
     if (!testId || isNaN(Number(testId))) {
       return NextResponse.json({ error: '유효하지 않은 테스트 ID입니다.' }, { status: 400 });
     }

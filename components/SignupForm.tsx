@@ -86,8 +86,8 @@ const SignupForm = () => {
   const loadTestData = () => {
     const testData = {
       username: 'testuser',
-      password: 'test123',
-      confirmPassword: 'test123',
+      password: '111111',
+      confirmPassword: '111111',
       name: '테스트 사용자',
       gender: 'male',
       birthdate: '1990-01-01',

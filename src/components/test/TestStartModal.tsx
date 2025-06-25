@@ -1,8 +1,8 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { AlertTriangle, Award, ChevronRight, ClipboardCheck } from "lucide-react"
+import { AlertTriangle, Award, ChevronRight, ClipboardCheck, Loader2 } from "lucide-react"
 import Image from "next/image"
 import { Card, CardContent, CardHeader } from "../ui/card"
 
@@ -12,6 +12,7 @@ interface TestStartModalProps {
 
 export default function TestStartModal({ testId }: TestStartModalProps) {
   const router = useRouter()
+  const [isStarting, setIsStarting] = useState(false)
 
   useEffect(() => {
     // Try to enter fullscreen mode
@@ -38,8 +39,43 @@ export default function TestStartModal({ testId }: TestStartModalProps) {
   }, [])
 
   // Start the test
-  const handleStartTest = () => {
-    router.push(`/test/${testId}/start`)
+  const handleStartTest = async () => {
+    try {
+      setIsStarting(true);
+      
+      // 먼저 mwd_answer_progress 테이블에 데이터 insert를 위해 start API 호출
+      console.log('[TestStartModal] 테스트 시작 API 호출 시작');
+      
+      const response = await fetch(`/api/test/${testId}/start`, {
+        method: 'GET',
+        headers: {
+          'Accept-Language': 'ko-KR',
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('[TestStartModal] API 호출 실패:', errorData);
+        throw new Error(errorData.error || '테스트 시작에 실패했습니다');
+      }
+
+      const data = await response.json();
+      console.log('[TestStartModal] 테스트 시작 API 응답:', {
+        anp_seq: data.anp_seq,
+        step: data.step,
+        qu_code: data.qu_code
+      });
+
+      // 성공적으로 mwd_answer_progress에 데이터가 insert되었으면 테스트 페이지로 이동
+      router.push(`/test/${testId}/start`);
+    } catch (error) {
+      console.error('[TestStartModal] 테스트 시작 오류:', error);
+      // 오류가 발생해도 테스트 페이지로 이동 (fallback)
+      router.push(`/test/${testId}/start`);
+    } finally {
+      setIsStarting(false);
+    }
   }
 
   return (
@@ -93,10 +129,20 @@ export default function TestStartModal({ testId }: TestStartModalProps) {
             <div className="flex justify-center mt-8">
               <button 
                 onClick={handleStartTest}
-                className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-lg text-lg transition-all duration-300 ease-in-out flex items-center justify-center transform hover:scale-105 hover:shadow-lg"
+                disabled={isStarting}
+                className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed text-white font-bold py-3 px-8 rounded-lg text-lg transition-all duration-300 ease-in-out flex items-center justify-center transform hover:scale-105 hover:shadow-lg disabled:transform-none disabled:shadow-none"
               >
-                <span>다음</span>
-                <ChevronRight className="ml-2 h-5 w-5" />
+                {isStarting ? (
+                  <>
+                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                    <span>시작 중...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>다음</span>
+                    <ChevronRight className="ml-2 h-5 w-5" />
+                  </>
+                )}
               </button>
             </div>
           </CardContent>

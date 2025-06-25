@@ -120,7 +120,7 @@ export async function GET() {
         AND ac.ac_use = 'Y'
       `;
       
-      console.log('일반회원 대시보드 - 사용자 정보 조회 결과:', JSON.stringify(userInfoResult, null, 2));
+      //console.log('일반회원 대시보드 - 사용자 정보 조회 결과:', JSON.stringify(userInfoResult, null, 2));
       
       if (!Array.isArray(userInfoResult) || userInfoResult.length === 0) {
         return NextResponse.json({ error: '사용자 정보를 찾을 수 없습니다.' }, { status: 404 });

@@ -128,38 +128,89 @@ export default function Dashboard() {
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen p-4">
-        <div className="w-16 h-16 border-t-4 border-blue-500 border-solid rounded-full animate-spin"></div>
-        <p className="mt-4 text-lg">데이터를 불러오는 중입니다...</p>
+      <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 relative overflow-hidden">
+        {/* 배경 장식 요소 */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute -top-40 -right-40 w-80 h-80 bg-gradient-to-br from-blue-400/20 to-purple-400/20 rounded-full blur-3xl animate-pulse"></div>
+          <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-gradient-to-br from-indigo-400/20 to-pink-400/20 rounded-full blur-3xl animate-pulse"></div>
+          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-gradient-to-br from-purple-400/10 to-blue-400/10 rounded-full blur-3xl animate-pulse"></div>
+        </div>
+        
+        <div className="bg-white/90 backdrop-blur-md rounded-3xl shadow-2xl border border-white/30 p-12 relative z-10 hover:shadow-3xl transition-all duration-300 max-w-md mx-auto">
+          <div className="text-center">
+            <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-blue-500 via-indigo-500 to-purple-600 rounded-2xl mb-6 shadow-lg animate-pulse">
+              <div className="w-10 h-10 border-4 border-white border-t-transparent rounded-full animate-spin"></div>
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-3">대시보드 로딩 중</h2>
+            <p className="text-gray-600 text-lg mb-6">사용자 정보를 확인하고 있습니다...</p>
+            <div className="flex justify-center space-x-2">
+              <div className="w-3 h-3 bg-blue-500 rounded-full animate-bounce"></div>
+              <div className="w-3 h-3 bg-indigo-500 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
+              <div className="w-3 h-3 bg-purple-500 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen p-4">
-        <div className="w-full max-w-3xl p-6 bg-white rounded-lg shadow-md">
-          <h1 className="mb-4 text-2xl font-bold text-red-500">오류 발생</h1>
-          <p className="text-gray-700">{error}</p>
+      <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-red-50 via-rose-50 to-pink-50 p-4 relative overflow-hidden">
+        {/* 배경 장식 요소 */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute -top-40 -right-40 w-80 h-80 bg-gradient-to-br from-red-400/20 to-rose-400/20 rounded-full blur-3xl animate-pulse"></div>
+          <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-gradient-to-br from-rose-400/20 to-pink-400/20 rounded-full blur-3xl animate-pulse"></div>
+        </div>
+        
+        <div className="w-full max-w-4xl bg-white/95 backdrop-blur-md rounded-3xl shadow-2xl border border-white/30 p-10 relative z-10 hover:shadow-3xl transition-all duration-300">
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-red-500 to-rose-600 rounded-2xl mb-6 shadow-lg animate-pulse">
+              <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              </svg>
+            </div>
+            <h1 className="text-4xl font-bold text-red-600 mb-4">오류 발생</h1>
+            <p className="text-gray-700 text-xl">{error}</p>
+          </div>
           
           {errorDetails && (
-            <div className="mt-4 p-4 bg-gray-100 rounded-md">
-              <h2 className="text-lg font-semibold mb-2">오류 상세 정보:</h2>
-              <pre className="text-sm overflow-auto">{JSON.stringify(errorDetails, null, 2)}</pre>
+            <div className="mb-8 p-8 bg-gray-50/90 backdrop-blur-sm rounded-2xl border border-gray-200 hover:bg-gray-50/95 transition-all duration-300">
+              <h2 className="text-xl font-bold mb-4 text-gray-800 flex items-center">
+                <div className="w-6 h-6 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg mr-3 flex items-center justify-center">
+                  <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                오류 상세 정보
+              </h2>
+              <pre className="text-sm overflow-auto bg-white/90 p-6 rounded-xl border text-gray-700 backdrop-blur-sm font-mono max-h-64">{JSON.stringify(errorDetails, null, 2)}</pre>
             </div>
           )}
           
-          <div className="mt-4 p-4 bg-gray-100 rounded-md">
-            <h2 className="text-lg font-semibold mb-2">세션 정보:</h2>
-            <pre className="text-sm overflow-auto">{JSON.stringify(session, null, 2)}</pre>
+          <div className="mb-8 p-8 bg-blue-50/90 backdrop-blur-sm rounded-2xl border border-blue-200 hover:bg-blue-50/95 transition-all duration-300">
+            <h2 className="text-xl font-bold mb-4 text-blue-800 flex items-center">
+              <div className="w-6 h-6 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg mr-3 flex items-center justify-center">
+                <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+              </div>
+              세션 정보
+            </h2>
+            <pre className="text-sm overflow-auto bg-white/90 p-6 rounded-xl border text-gray-700 backdrop-blur-sm font-mono max-h-64">{JSON.stringify(session, null, 2)}</pre>
           </div>
           
-          <button 
-            onClick={fetchDashboardData}
-            className="px-4 py-2 mt-4 text-white bg-blue-500 rounded hover:bg-blue-600"
-          >
-            다시 시도
-          </button>
+          <div className="flex justify-center">
+            <button 
+              onClick={fetchDashboardData}
+              className="px-8 py-4 bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-medium rounded-xl hover:from-blue-600 hover:to-indigo-700 transition-all duration-200 shadow-lg hover:shadow-xl flex items-center transform hover:scale-105"
+            >
+              <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              다시 시도
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -171,13 +222,27 @@ export default function Dashboard() {
 
   // 기본 대시보드 페이지에 표시할 내용 (리다이렉트되지 않은 경우)
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="flex flex-col min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
       <Header />
-      <main className="flex-grow p-4 bg-gray-50">
+      <main className="flex-grow p-4">
         <div className="w-full max-w-4xl mx-auto">
-          <div className="p-6 mb-6 bg-white rounded-lg shadow-md">
-            <h1 className="mb-4 text-2xl font-bold text-gray-800">대시보드 리다이렉트 중...</h1>
-            <p className="text-gray-600">잠시만 기다려주세요. 적절한 대시보드로 이동합니다.</p>
+          <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-white/20 p-8 text-center">
+            <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full mb-6">
+              <div className="w-10 h-10 border-4 border-white border-t-transparent rounded-full animate-spin"></div>
+            </div>
+            <h1 className="text-3xl font-bold text-gray-900 mb-4">대시보드 리다이렉트 중...</h1>
+            <p className="text-lg text-gray-600 mb-8">잠시만 기다려주세요. 적절한 대시보드로 이동합니다.</p>
+            
+            <div className="flex flex-wrap justify-center gap-4 text-sm">
+              <div className="flex items-center px-4 py-2 bg-blue-100 rounded-full">
+                <div className="w-2 h-2 bg-blue-500 rounded-full mr-2"></div>
+                <span className="text-blue-700">회원 유형 확인 중</span>
+              </div>
+              <div className="flex items-center px-4 py-2 bg-indigo-100 rounded-full">
+                <div className="w-2 h-2 bg-indigo-500 rounded-full mr-2"></div>
+                <span className="text-indigo-700">데이터 로딩 중</span>
+              </div>
+            </div>
           </div>
         </div>
       </main>

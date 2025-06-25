@@ -1,0 +1,77 @@
+interface Question {
+  qu_code: string;
+  qu_text: string;
+  qu_order: number;
+}
+
+interface PersonalityTestProps {
+  questions: Question[];
+  selectedAnswers: Record<string, number>;
+  onSelectChoice: (questionCode: string, choiceValue: number, choiceWeight: number) => void;
+}
+
+export default function PersonalityTest({ questions, selectedAnswers, onSelectChoice }: PersonalityTestProps) {
+  const options = [
+    { value: 1, text: '매우 그렇다', color: 'from-emerald-500 to-green-600', icon: '😊', emoji: '💯' },
+    { value: 2, text: '그렇다', color: 'from-blue-500 to-blue-600', icon: '🙂', emoji: '👍' },
+    { value: 3, text: '약간 그렇다', color: 'from-indigo-500 to-indigo-600', icon: '😐', emoji: '👌' },
+    { value: 4, text: '별로 그렇지 않다', color: 'from-amber-500 to-orange-600', icon: '😕', emoji: '🤔' },
+    { value: 5, text: '그렇지 않다', color: 'from-red-500 to-red-600', icon: '😞', emoji: '👎' },
+    { value: 6, text: '전혀 그렇지 않다', color: 'from-gray-500 to-gray-600', icon: '😤', emoji: '❌' }
+  ];
+
+  return (
+    <div className="relative group">
+      <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-600 rounded-3xl blur-xl opacity-20 group-hover:opacity-30 transition duration-500"></div>
+      <div className="relative bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/40 p-10 hover:shadow-3xl transition-all duration-500">
+        {questions.map((question, questionIndex) => (
+          <div key={question.qu_code} className={`${questionIndex > 0 ? 'border-t border-gray-100 pt-10 mt-10' : ''}`}>
+            <div className="flex items-start mb-8">
+              <div className="relative group/number">
+                <div className="absolute -inset-1 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-2xl blur opacity-60 group-hover/number:opacity-100 transition duration-300"></div>
+                <div className="relative w-14 h-14 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center mr-6 flex-shrink-0 shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-110 hover:rotate-3">
+                  <span className="text-white font-bold text-lg">{question.qu_order}</span>
+                </div>
+              </div>
+              <div className="flex-1 pt-2">
+                <p className="text-xl text-gray-900 leading-relaxed font-medium">{question.qu_text}</p>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 ml-20">
+              {options.map((option) => (
+                <div key={option.value} className="relative group/option">
+                  <div className={`absolute -inset-0.5 rounded-2xl blur opacity-0 group-hover/option:opacity-60 transition duration-300 ${
+                    selectedAnswers[question.qu_code] === option.value
+                      ? `bg-gradient-to-r ${option.color} opacity-75`
+                      : `bg-gradient-to-r ${option.color}`
+                  }`}></div>
+                  <button
+                    onClick={() => onSelectChoice(question.qu_code, option.value, 0)}
+                    className={`relative w-full py-5 px-4 text-center rounded-2xl font-semibold transition-all duration-300 hover:scale-105 hover:-translate-y-1 ${
+                      selectedAnswers[question.qu_code] === option.value
+                        ? `bg-gradient-to-r ${option.color} text-white shadow-xl scale-105 -translate-y-1`
+                        : 'bg-white/90 backdrop-blur-sm border border-gray-200/60 text-gray-700 hover:bg-white hover:shadow-lg hover:border-gray-300/60'
+                    }`}
+                  >
+                    <div className="flex flex-col items-center space-y-2">
+                      <div className="text-2xl mb-1">
+                        {selectedAnswers[question.qu_code] === option.value ? option.emoji : option.icon}
+                      </div>
+                      <div className="text-sm font-medium leading-tight">{option.text}</div>
+                      <div className={`w-8 h-1 rounded-full transition-all duration-300 ${
+                        selectedAnswers[question.qu_code] === option.value
+                          ? 'bg-white/50'
+                          : 'bg-gray-300/50'
+                      }`}></div>
+                    </div>
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+} 

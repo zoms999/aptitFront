@@ -266,8 +266,8 @@ export const authOptions = {
     },
     async session({ session, token }: { session: any, token: any }) {
       // 디버깅을 위한 로그 추가
-      console.log('Session Token:', JSON.stringify(token, null, 2));
-      console.log('Session Before:', JSON.stringify(session, null, 2));
+      //console.log('Session Token:', JSON.stringify(token, null, 2));
+      //console.log('Session Before:', JSON.stringify(session, null, 2));
       
       // 필수 필드 확인
       if (!token.id || !(token as any).ac_id) {
@@ -296,7 +296,7 @@ export const authOptions = {
       }
       
       // 디버깅을 위한 로그 추가
-      console.log('Session After:', JSON.stringify(session, null, 2));
+      //console.log('Session After:', JSON.stringify(session, null, 2));
       
       return session;
     },

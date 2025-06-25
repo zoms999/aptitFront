@@ -10,9 +10,22 @@ import { useSession } from 'next-auth/react';
 
 // 로딩 컴포넌트 직접 구현
 const Loading = () => (
-  <div className="flex flex-col items-center justify-center py-8">
-    <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mb-4"></div>
-    <p className="text-gray-600">로딩 중...</p>
+  <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 relative overflow-hidden">
+    {/* 배경 장식 요소 */}
+    <div className="absolute inset-0 overflow-hidden pointer-events-none">
+      <div className="absolute -top-40 -right-40 w-80 h-80 bg-gradient-to-br from-blue-400/20 to-purple-400/20 rounded-full blur-3xl animate-pulse"></div>
+      <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-gradient-to-br from-indigo-400/20 to-pink-400/20 rounded-full blur-3xl animate-pulse"></div>
+    </div>
+    
+    <div className="bg-white/90 backdrop-blur-md rounded-3xl shadow-2xl border border-white/30 p-12 relative z-10 hover:shadow-3xl transition-all duration-300">
+      <div className="text-center">
+        <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-blue-500 via-indigo-500 to-purple-600 rounded-2xl mb-6 shadow-lg animate-pulse">
+          <div className="w-10 h-10 border-4 border-white border-t-transparent rounded-full animate-spin"></div>
+        </div>
+        <h2 className="text-2xl font-bold text-gray-900 mb-3">결제 정보를 불러오는 중</h2>
+        <p className="text-gray-600 text-lg">잠시만 기다려주세요...</p>
+      </div>
+    </div>
   </div>
 );
 
@@ -405,100 +418,180 @@ function PaymentContent() {
   };
 
   return (
-    <div className="container mx-auto p-4 max-w-lg">
-      <h1 className="text-2xl font-bold mb-6 text-center">결제하기</h1>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 relative overflow-hidden">
+      {/* 배경 장식 요소 */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-gradient-to-br from-blue-400/20 to-purple-400/20 rounded-full blur-3xl animate-pulse"></div>
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-gradient-to-br from-indigo-400/20 to-pink-400/20 rounded-full blur-3xl animate-pulse"></div>
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-gradient-to-br from-purple-400/10 to-blue-400/10 rounded-full blur-3xl animate-pulse"></div>
+      </div>
       
-      {status === 'loading' || loading ? (
-        <Loading />
-      ) : (
-        <>
-          {/* 상품 선택 영역 */}
-          {products.length > 0 && !selectedProduct && (
-            <div className="bg-white p-6 rounded-lg shadow-md mb-6">
-              <h2 className="text-lg font-semibold mb-4">상품 선택</h2>
-              <div className="space-y-4">
-                {products.map((product) => (
-                  <div 
-                    key={product.pd_num}
-                    className="border rounded-lg p-4 cursor-pointer hover:border-blue-500 hover:bg-blue-50 transition"
-                    onClick={() => handleSelectProduct(product)}
-                  >
-                    <div className="flex justify-between mb-2">
-                      <span className="font-medium text-lg">{product.pd_name}</span>
-                      <span className="font-bold text-blue-600">{product.pd_price.toLocaleString()}원</span>
-                    </div>
-                    <div className="text-gray-600 text-sm">
-                      <p>유효기간: {product.pd_virtual_expire_at}일</p>
-                      <p>타입: {product.pd_kind}</p>
-                    </div>
+      <div className="container mx-auto p-4 max-w-2xl relative z-10">
+        {/* 헤더 */}
+        <div className="text-center mb-8 pt-8">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl mb-4 shadow-lg">
+            <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+            </svg>
+          </div>
+          <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent mb-2">결제하기</h1>
+          <p className="text-gray-600 text-lg">ArtyLink 종합 적성 검사 서비스</p>
+        </div>
+        
+        {status === 'loading' || loading ? (
+          <Loading />
+        ) : (
+          <>
+            {/* 상품 선택 영역 */}
+            {products.length > 0 && !selectedProduct && (
+              <div className="bg-white/90 backdrop-blur-md rounded-3xl shadow-2xl border border-white/30 p-8 mb-8 hover:shadow-3xl transition-all duration-300">
+                <div className="flex items-center mb-6">
+                  <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center mr-3">
+                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                    </svg>
                   </div>
-                ))}
+                  <h2 className="text-2xl font-bold text-gray-900">상품 선택</h2>
+                </div>
+                <div className="grid gap-4">
+                  {products.map((product, index) => (
+                    <div 
+                      key={product.pd_num}
+                      className="group border border-gray-200/50 rounded-2xl p-6 cursor-pointer hover:border-blue-400 hover:bg-blue-50/50 transition-all duration-300 hover:scale-[1.02] hover:shadow-lg"
+                      onClick={() => handleSelectProduct(product)}
+                      style={{
+                        animationDelay: `${index * 0.1}s`
+                      }}
+                    >
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="flex-1">
+                          <h3 className="font-bold text-xl text-gray-900 mb-2 group-hover:text-blue-700 transition-colors">{product.pd_name}</h3>
+                          <div className="flex items-center text-blue-600 font-bold text-2xl">
+                            <span>{product.pd_price.toLocaleString()}원</span>
+                          </div>
+                        </div>
+                        <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                          <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                          </svg>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div className="bg-gray-50/80 rounded-lg p-3">
+                          <span className="text-gray-500 block mb-1">유효기간</span>
+                          <span className="text-gray-900 font-medium">{product.pd_virtual_expire_at}일</span>
+                        </div>
+                        <div className="bg-gray-50/80 rounded-lg p-3">
+                          <span className="text-gray-500 block mb-1">상품 타입</span>
+                          <span className="text-gray-900 font-medium">{product.pd_kind}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* 결제 정보 영역 */}
-          {selectedProduct && (
-            <div className="bg-white p-6 rounded-lg shadow-md mb-6">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-lg font-semibold">결제 정보</h2>
+            {/* 결제 정보 영역 */}
+            {selectedProduct && (
+              <div className="bg-white/90 backdrop-blur-md rounded-3xl shadow-2xl border border-white/30 p-8 mb-8 hover:shadow-3xl transition-all duration-300">
+                <div className="flex justify-between items-center mb-6">
+                  <div className="flex items-center">
+                    <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center mr-3">
+                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                    </div>
+                    <h2 className="text-2xl font-bold text-gray-900">결제 정보</h2>
+                  </div>
+                  <button 
+                    onClick={() => setSelectedProduct(null)}
+                    className="text-sm text-blue-600 hover:text-blue-800 font-medium hover:bg-blue-50 px-3 py-1 rounded-lg transition-all duration-200"
+                  >
+                    상품 변경
+                  </button>
+                </div>
+                
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center py-3 border-b border-gray-100/80">
+                    <span className="text-gray-600 font-medium">주문명</span>
+                    <span className="text-gray-900 font-semibold">{orderName}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-3 border-b border-gray-100/80">
+                    <span className="text-gray-600 font-medium">결제금액</span>
+                    <span className="text-blue-600 font-bold text-xl">{amount.toLocaleString()}원</span>
+                  </div>
+                  <div className="flex justify-between items-center py-3">
+                    <span className="text-gray-600 font-medium">주문번호</span>
+                    <span className="text-gray-700 font-mono text-sm bg-gray-50 px-3 py-1 rounded-lg">{orderId}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 결제 위젯 영역 */}
+            {selectedProduct && paymentWidget ? (
+              <div className="bg-white/90 backdrop-blur-md rounded-3xl shadow-2xl border border-white/30 p-8 mb-8 hover:shadow-3xl transition-all duration-300">
+                <div className="flex items-center mb-6">
+                  <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-600 rounded-lg flex items-center justify-center mr-3">
+                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                    </svg>
+                  </div>
+                  <h2 className="text-2xl font-bold text-gray-900">결제 수단 선택</h2>
+                </div>
+                <div id="payment-methods" className="mb-6"></div>
+                <div id="agreement" className="mb-4"></div>
+              </div>
+            ) : selectedProduct && !paymentWidget ? (
+              <div className="bg-white/90 backdrop-blur-md rounded-3xl shadow-2xl border border-white/30 p-8 mb-8 text-center hover:shadow-3xl transition-all duration-300">
+                <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-red-500 to-rose-600 rounded-2xl mb-4 shadow-lg">
+                  <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                  </svg>
+                </div>
+                <h3 className="text-xl font-bold text-red-600 mb-2">결제 시스템 오류</h3>
+                <p className="text-gray-700 mb-6">결제 시스템을 불러오는데 실패했습니다.</p>
                 <button 
-                  onClick={() => setSelectedProduct(null)}
-                  className="text-sm text-blue-600 hover:text-blue-800"
+                  onClick={handleRefresh}
+                  className="px-6 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-medium rounded-xl hover:from-blue-600 hover:to-indigo-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105"
                 >
-                  상품 변경
+                  새로고침
                 </button>
               </div>
-              <div className="flex justify-between mb-4">
-                <span className="font-semibold">주문명:</span>
-                <span>{orderName}</span>
-              </div>
-              <div className="flex justify-between mb-4">
-                <span className="font-semibold">결제금액:</span>
-                <span>{amount.toLocaleString()}원</span>
-              </div>
-              <div className="flex justify-between mb-4">
-                <span className="font-semibold">주문번호:</span>
-                <span>{orderId}</span>
-              </div>
-            </div>
-          )}
+            ) : null}
 
-          {/* 결제 위젯 영역 */}
-          {selectedProduct && paymentWidget ? (
-            <div className="bg-white p-6 rounded-lg shadow-md mb-6">
-              <h2 className="text-lg font-semibold mb-4">결제 수단 선택</h2>
-              <div id="payment-methods" className="mb-4"></div>
-              <div id="agreement" className="mb-4"></div>
-            </div>
-          ) : selectedProduct && !paymentWidget ? (
-            <div className="bg-white p-6 rounded-lg shadow-md mb-6 text-center">
-              <p className="text-gray-700 mb-4">결제 시스템을 불러오는데 실패했습니다.</p>
-              <button 
-                onClick={handleRefresh}
-                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-              >
-                새로고침
-              </button>
-            </div>
-          ) : null}
-
-          {/* 결제 버튼 */}
-          {selectedProduct && (
-            <button
-              onClick={handlePayment}
-              disabled={!paymentMethodsWidget}
-              className={`w-full py-3 rounded-lg font-semibold transition duration-200 ${
-                !paymentMethodsWidget 
-                  ? 'bg-gray-400 cursor-not-allowed text-gray-100' 
-                  : 'bg-blue-600 hover:bg-blue-700 text-white'
-              }`}
-            >
-              결제하기
-            </button>
-          )}
-        </>
-      )}
+            {/* 결제 버튼 */}
+            {selectedProduct && (
+              <div className="text-center">
+                <button
+                  onClick={handlePayment}
+                  disabled={!paymentMethodsWidget || isProcessing}
+                  className={`w-full py-4 rounded-2xl font-bold text-lg transition-all duration-200 shadow-xl hover:shadow-2xl ${
+                    !paymentMethodsWidget || isProcessing
+                      ? 'bg-gray-400 cursor-not-allowed text-gray-100' 
+                      : 'bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-600 hover:from-blue-600 hover:via-indigo-600 hover:to-purple-700 text-white transform hover:scale-105'
+                  }`}
+                >
+                  {isProcessing ? (
+                    <span className="flex items-center justify-center">
+                      <div className="w-6 h-6 border-3 border-white border-t-transparent rounded-full animate-spin mr-3"></div>
+                      결제 처리 중...
+                    </span>
+                  ) : (
+                    <span className="flex items-center justify-center">
+                      <svg className="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                      </svg>
+                      결제하기
+                    </span>
+                  )}
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }

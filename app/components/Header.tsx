@@ -2,6 +2,7 @@
 
 import { useSession, signOut } from 'next-auth/react';
 import Link from 'next/link';
+import LanguageSelector from '../../components/LanguageSelector';
 
 export default function Header() {
   const { data: session } = useSession();
@@ -30,7 +31,10 @@ export default function Header() {
         </nav>
 
         {/* 사용자 메뉴 */}
-        <div className="flex items-center">
+        <div className="flex items-center space-x-4">
+          {/* 언어 선택기 */}
+          <LanguageSelector />
+          
           {session ? (
             <div className="flex items-center space-x-4">
               <div className="hidden md:block">
