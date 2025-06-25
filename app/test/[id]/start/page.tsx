@@ -197,92 +197,45 @@ export default function TestStartPage({ params }: TestStartPageProps) {
     }));
   };
 
-  // 다음 문항으로 이동
+  // 다음 문항으로 이동하는 핸들러
   const handleNextQuestion = async () => {
-    if (!testData) return;
+    if (isSubmitting || !testData) return;
     
-    // 단계 완료 화면에서의 다음 버튼 클릭 처리
-    if (testData.isStepCompleted) {
-      try {
-        setIsSubmitting(true);
-        console.log('단계 완료 후 다음 단계로 진행 중...');
-        
-        // 다음 단계 시작을 위한 API 호출
-        console.log('다음 단계 API 호출 준비:', {
-          testId,
-          currentStep: testData.prev_step || testData.step,
-          anpSeq: testData.anp_seq,
-          testData: testData
-        });
-        
-        const nextStepResponse = await fetch(`/api/test/${testId}/start-next-step`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...getLanguageHeaders()
-          },
-          body: JSON.stringify({
-            currentStep: testData.prev_step || testData.step,
-            anpSeq: testData.anp_seq
-          })
-        });
-        
-        console.log('다음 단계 API 응답 상태:', nextStepResponse.status);
-        
-        if (!nextStepResponse.ok) {
-          const errorData = await nextStepResponse.json().catch(() => ({}));
-          throw new Error(errorData.error || '다음 단계 시작에 실패했습니다');
-        }
-        
-        const nextStepData = await nextStepResponse.json();
-        console.log('다음 단계 시작 결과:', nextStepData);
-        
-        // 단계 완료 상태를 먼저 해제
-        setTestData(prev => prev ? ({
-          ...prev,
-          isStepCompleted: false
-        }) : null);
-        
-        // 다음 단계의 데이터를 가져오기 위해 fetchTestData 호출
-        await fetchTestData();
-        console.log('다음 단계 데이터 로드 완료');
-        
-        // 로드 후 상태 확인
-        setTimeout(() => {
-          console.log('fetchTestData 완료 후 testData 상태:', {
-            step: testData?.step,
-            questions: testData?.questions?.length || 0,
-            isStepCompleted: testData?.isStepCompleted
-          });
-        }, 100);
-      } catch (error) {
-        console.error('다음 단계 진행 오류:', error);
-        alert('다음 단계로 진행하는데 오류가 발생했습니다');
-      } finally {
-        setIsSubmitting(false);
-      }
-      return;
-    }
-    
-    // 모든 문항에 답변했는지 확인
-    const allQuestionsAnswered = testData.questions?.every(q => selectedAnswers[q.qu_code] !== undefined);
-    
-    if (!allQuestionsAnswered) {
-      alert('모든 문항에 답변해주세요.');
-      return;
-    }
+    setIsSubmitting(true);
     
     try {
-      setIsSubmitting(true);
-      
+      // TestCompletionModal에서 호출된 경우 (단계 완료 후 다음 단계 시작)
+      if (testData.isStepCompleted) {
+        console.log('단계 완료 모달에서 다음 단계 시작 요청');
+        
+        // isStepCompleted를 false로 초기화하고 새로운 테스트 데이터 가져오기
+        setTestData(prev => prev ? ({
+          ...prev,
+          isStepCompleted: false,
+          questions: []
+        }) : null);
+        
+        // 새로운 테스트 데이터 가져오기
+        await fetchTestData();
+        setIsSubmitting(false);
+        return;
+      }
+
+      // 일반적인 답변 저장 및 다음 문항 이동
+      const selectedAnswersList = Object.entries(selectedAnswers);
+      if (selectedAnswersList.length === 0) {
+        alert('답변을 선택해주세요.');
+        setIsSubmitting(false);
+        return;
+      }
+
       // 각 문항의 답변을 순차적으로 저장
-      for (const question of testData.questions || []) {
-        const selectedValue = selectedAnswers[question.qu_code];
-        const selectedChoice = question.choices.find(c => c.an_val === selectedValue);
+      for (const [questionCode, selectedValue] of selectedAnswersList) {
+        const question = testData.questions.find(q => q.qu_code === questionCode);
+        const selectedChoice = question?.choices.find(c => c.an_val === selectedValue);
         
-        if (selectedValue === undefined || !selectedChoice) continue;
-        
-        // 답변 저장 API 호출
+        if (selectedValue === undefined || !selectedChoice || !question) continue;
+
         const response = await fetch(`/api/test/${testId}/save-answer`, {
           method: 'POST',
           headers: {
@@ -291,28 +244,19 @@ export default function TestStartPage({ params }: TestStartPageProps) {
           },
           body: JSON.stringify({
             anp_seq: testData.anp_seq,
-            qu_code: question.qu_code,
+            qu_code: questionCode,
             an_val: selectedValue,
             an_wei: selectedChoice.an_wei,
             step: testData.step
           })
         });
-        
+
         if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.error || '답변을 저장하는데 실패했습니다');
+          throw new Error('답변 저장에 실패했습니다');
         }
-        
+
         const data = await response.json();
-        console.log('답변 저장 결과:', data);
-        console.log('완료된 페이지:', data.completed_pages, '총 문항 수:', data.total_questions);
-        
-        // 테스트 완료 여부 확인
-        if (data.isCompleted) {
-          // 모든 테스트 완료 시 결과 페이지로 이동
-          router.push(`/test-result/${testId}`);
-          return;
-        }
+        console.log('답변 저장 응답:', data);
         
         if (data.isStepCompleted) {
           // 현재 단계가 완료된 경우, 완료 화면 표시
@@ -323,16 +267,17 @@ export default function TestStartPage({ params }: TestStartPageProps) {
             total_questions: data.total_questions
           });
           
-          setTestData({
-            ...testData,
+          setTestData(prev => prev ? ({
+            ...prev,
             questions: [],
             isStepCompleted: true,
-            step: data.nextQuestion?.step || testData.step,
-            prev_step: testData.step,
+            step: data.nextQuestion?.step || prev.step,
+            prev_step: prev.step,
+            test_step: getTestStep(data.nextQuestion?.step || prev.step),
             // 진행률 정보도 업데이트
             completed_pages: data.completed_pages,
             total_questions: data.total_questions
-          });
+          }) : null);
           setIsSubmitting(false);
           return;
         }
@@ -344,14 +289,15 @@ export default function TestStartPage({ params }: TestStartPageProps) {
         
         // 다음 문항 데이터로 업데이트
         if (data.questions && data.questions.length > 0) {
-          setTestData({
-            ...testData,
+          setTestData(prev => prev ? ({
+            ...prev,
             ...data.nextQuestion,
             questions: data.questions,
+            test_step: getTestStep(data.nextQuestion?.step || prev.step),
             // 완료 페이지와 총 페이지 수 정보 업데이트
             completed_pages: data.completed_pages,
             total_questions: data.total_questions
-          });
+          }) : null);
           
           // 상태 업데이트 후 확인 로그
           setTimeout(() => {
@@ -496,15 +442,23 @@ export default function TestStartPage({ params }: TestStartPageProps) {
               <h3 className="font-bold text-yellow-800">디버깅 정보:</h3>
               <p>testData 존재: {testData ? 'true' : 'false'}</p>
               <p>testData.questions 존재: {testData?.questions ? 'true' : 'false'}</p>
-              <p>testData.questions 길이: {testData?.questions?.length || 0}</p>비밀번호 
+              <p>testData.questions 길이: {testData?.questions?.length || 0}</p>
               <p>testData.step: {testData?.step}</p>
+              <p>testData.prev_step: {testData?.prev_step}</p>
+              <p>testData.isStepCompleted: {testData?.isStepCompleted ? 'true' : 'false'}</p>
               <p>isPersonalityTest: {isPersonalityTest ? 'true' : 'false'}</p>
               <p>isThinkingTest: {isThinkingTest ? 'true' : 'false'}</p>
               <p>isImagePreferenceTest: {isImagePreferenceTest ? 'true' : 'false'}</p>
             </div>
           )}
 
-          {testData && testData.questions && testData.questions.length > 0 ? (
+          {/* 테스트 완료 모달이 우선 표시되어야 함 */}
+          {testData && testData.isStepCompleted ? (
+            <TestCompletionModal 
+              onNextStep={handleNextQuestion} 
+              currentStep={testData.prev_step || testData.step}
+            />
+          ) : testData && testData.questions && testData.questions.length > 0 ? (
             <div className="space-y-8">
               {/* 1. 성향 진단 */}
               {isPersonalityTest && (
@@ -550,14 +504,6 @@ export default function TestStartPage({ params }: TestStartPageProps) {
               <h3 className="text-2xl font-bold text-gray-900 mb-3">문항을 불러오는 중입니다</h3>
               <p className="text-gray-600 text-lg">잠시만 기다려주세요...</p>
             </div>
-          )}
-
-          {/* 테스트 완료 모달 */}
-          {testData && testData.isStepCompleted && (
-            <TestCompletionModal 
-              onNextStep={handleNextQuestion} 
-              currentStep={testData.prev_step || testData.step}
-            />
           )}
         </div>
       </div>

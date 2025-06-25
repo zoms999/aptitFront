@@ -164,6 +164,10 @@ export async function POST(
           `;
           
           console.log('answer_progress 테이블 업데이트 완료: anp_step=thk, qu_code=', nextQuestion.qu_code);
+          
+          // 성향 진단 완료 상태로 설정하여 안내페이지가 나타나도록 함
+          isStepCompleted = true;
+          console.log('성향 진단 완료 상태로 설정 - 안내페이지 표시');
         } else {
           isStepCompleted = true;
           console.log('성향 진단 완료 - 사고력 진단 문항 없음');
@@ -257,6 +261,10 @@ export async function POST(
                   qu_code = ${nextQuestion.qu_code}
               WHERE anp_seq = ${anp_seq}::integer
             `;
+            
+            // 사고력 진단 완료 상태로 설정하여 안내페이지가 나타나도록 함
+            isStepCompleted = true;
+            console.log('사고력 진단 완료 상태로 설정 - 안내페이지 표시');
           } else {
             isStepCompleted = true;
             console.log('사고력 진단 완료 - 선호도 진단 문항 없음');
