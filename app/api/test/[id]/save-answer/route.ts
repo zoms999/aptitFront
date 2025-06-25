@@ -373,7 +373,6 @@ export async function POST(
       qu_explain?: string;
       qu_category: string;
       qu_action: string;
-      qu_image?: string;
       qu_images?: string[];
       choices: Array<{
         an_val: number;
@@ -579,7 +578,6 @@ export async function POST(
             qu_explain: row.qu_explain,
             qu_category: row.qu_category,
             qu_action: row.qu_action,
-            qu_image: row.qu_images && row.qu_images.length > 0 ? row.qu_images[0] : undefined,
             qu_images: row.qu_images || [],
             choices: row.choices || []
           };

@@ -10,7 +10,6 @@ interface Choice {
 interface Question {
   qu_code: string;
   qu_order: number;
-  qu_image?: string;
   qu_images?: string[];
   choices: Choice[];
 }
@@ -129,28 +128,30 @@ export default function PreferenceTest({
                 <div className="absolute -inset-2 bg-gradient-to-r from-purple-400 via-pink-400 to-rose-400 rounded-3xl blur-lg opacity-20 group-hover/main-image:opacity-40 transition duration-500"></div>
                 <div className="relative bg-gradient-to-br from-white via-purple-50/30 to-pink-50/30 backdrop-blur-lg border border-white/60 rounded-3xl p-8 shadow-xl hover:shadow-2xl transition-all duration-500">
                   <div className="w-full max-w-4xl mx-auto">
-                    {question.qu_image ? (
-                      <div className="relative overflow-hidden rounded-2xl shadow-2xl group/image">
-                        <img 
-                          src={question.qu_image} 
-                          alt="검사 이미지" 
-                          className="w-full h-auto transition-all duration-500 group-hover/image:scale-105"
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/10 via-transparent to-transparent opacity-0 group-hover/image:opacity-100 transition duration-300"></div>
-                      </div>
-                    ) : question.qu_images && question.qu_images.length > 0 ? (
-                      <div className="grid grid-cols-1 gap-6">
-                        {question.qu_images.map((image, imgIndex) => (
-                          <div key={imgIndex} className="relative overflow-hidden rounded-2xl shadow-2xl group/image">
-                            <img 
-                              src={image} 
-                              alt={`검사 이미지 ${imgIndex + 1}`} 
-                              className="w-full h-auto transition-all duration-500 group-hover/image:scale-105"
-                            />
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/10 via-transparent to-transparent opacity-0 group-hover/image:opacity-100 transition duration-300"></div>
-                          </div>
-                        ))}
-                      </div>
+                    {question.qu_images && question.qu_images.length > 0 ? (
+                      question.qu_images.length === 1 ? (
+                        <div className="relative overflow-hidden rounded-2xl shadow-2xl group/image">
+                          <img 
+                            src={question.qu_images[0]} 
+                            alt="검사 이미지" 
+                            className="w-full h-auto transition-all duration-500 group-hover/image:scale-105"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/10 via-transparent to-transparent opacity-0 group-hover/image:opacity-100 transition duration-300"></div>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 gap-6">
+                          {question.qu_images.map((image, imgIndex) => (
+                            <div key={imgIndex} className="relative overflow-hidden rounded-2xl shadow-2xl group/image">
+                              <img 
+                                src={image} 
+                                alt={`검사 이미지 ${imgIndex + 1}`} 
+                                className="w-full h-auto transition-all duration-500 group-hover/image:scale-105"
+                              />
+                              <div className="absolute inset-0 bg-gradient-to-t from-black/10 via-transparent to-transparent opacity-0 group-hover/image:opacity-100 transition duration-300"></div>
+                            </div>
+                          ))}
+                        </div>
+                      )
                     ) : (
                       <div className="relative bg-gradient-to-br from-gray-100 via-purple-50 to-pink-50 rounded-2xl p-16 text-center border border-gray-200/50">
                         <div className="relative">

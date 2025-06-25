@@ -417,6 +417,7 @@ model mwd_question {
   qu_filename         String                @db.Char(8)
   qu_qusyn            String?               @db.Char(1)
   qu_action           String?               @db.VarChar(50)
+  qu_time_limit_sec   Int?                  // 문제 풀이 제한 시간 (초 단위). NULL인 경우 시간 제한 없음.
   mwd_answer          mwd_answer[]
   mwd_answer_progress mwd_answer_progress[]
   mwd_image_job_map   mwd_image_job_map[]
