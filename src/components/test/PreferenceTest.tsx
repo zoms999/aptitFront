@@ -1,3 +1,5 @@
+import React, { useEffect } from 'react';
+
 interface Choice {
   an_val: number;
   an_text: string;
@@ -26,8 +28,66 @@ export default function PreferenceTest({
   onSelectChoice, 
   currentImageNumber 
 }: PreferenceTestProps) {
+  // 개발 환경에서만 자동 답변 선택 기능
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
+      const autoSelectAnswers = () => {
+        questions.forEach((question) => {
+          // 이미 답변이 선택되지 않은 문항에 대해서만 자동 선택
+          if (!selectedAnswers[question.qu_code] && question.choices.length > 0) {
+            // 선호도 진단의 경우 랜덤하게 선택
+            const randomChoice = question.choices[Math.floor(Math.random() * question.choices.length)];
+            console.log(`[자동 답변] 문항 ${question.qu_code}: 선택지 ${randomChoice.an_val} 자동 선택`);
+            onSelectChoice(question.qu_code, randomChoice.an_val, randomChoice.an_wei);
+          }
+        });
+      };
+
+      // 컴포넌트 마운트 후 1초 뒤에 자동 선택 실행
+      const timer = setTimeout(autoSelectAnswers, 1000);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [questions, selectedAnswers, onSelectChoice]);
+
+  // 수동 자동 답변 선택 함수
+  const handleManualAutoSelect = () => {
+    if (process.env.NODE_ENV === 'development') {
+      questions.forEach((question) => {
+        if (question.choices.length > 0) {
+          // 선호도 진단의 경우 랜덤하게 선택
+          const randomChoice = question.choices[Math.floor(Math.random() * question.choices.length)];
+          console.log(`[수동 자동 답변] 문항 ${question.qu_code}: 선택지 ${randomChoice.an_val} 선택`);
+          onSelectChoice(question.qu_code, randomChoice.an_val, randomChoice.an_wei);
+        }
+      });
+    }
+  };
+
   return (
     <>
+      {/* 개발 환경에서만 표시되는 자동 답변 안내 */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="mb-4 p-3 bg-purple-100 border border-purple-300 rounded-lg">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              <svg className="w-5 h-5 text-purple-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span className="text-purple-800 text-sm font-medium">
+                개발 모드: 선호도 진단 자동 답변이 1초 후 적용됩니다.
+              </span>
+            </div>
+            <button
+              onClick={handleManualAutoSelect}
+              className="px-3 py-1 bg-purple-600 text-white text-xs font-medium rounded hover:bg-purple-700 transition-colors"
+            >
+              지금 자동 선택
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 이미지 번호 표시 */}
       <div className="mb-8">
         <div className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-xl shadow-lg font-bold">

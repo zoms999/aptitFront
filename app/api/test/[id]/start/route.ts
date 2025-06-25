@@ -374,6 +374,7 @@ export async function GET(
               q.qu_filename,
               q.qu_order,
               ql.qu_text,
+              ql.qu_explain,
               ql.qu_category,
               q.qu_action,
               qc.display_order as an_val,
@@ -416,6 +417,7 @@ export async function GET(
               q.qu_filename,
               q.qu_order,
               ql.qu_text,
+              ql.qu_explain,
               ql.qu_category,
               q.qu_action,
               qc.display_order as an_val,
@@ -518,6 +520,7 @@ export async function GET(
               q.qu_filename,
               q.qu_order,
               ql.qu_text,
+              ql.qu_explain,
               ql.qu_category,
               q.qu_action,
               qc.display_order as an_val,
@@ -560,6 +563,7 @@ export async function GET(
               q.qu_filename,
               q.qu_order,
               ql.qu_text,
+              ql.qu_explain,
               ql.qu_category,
               q.qu_action,
               qc.display_order as an_val,
@@ -762,6 +766,7 @@ export async function GET(
       qu_filename: string;
       qu_order: number;
       qu_text: string;
+      qu_explain?: string;
       qu_category: string;
       qu_action: string;
       an_val: number;
@@ -778,6 +783,7 @@ export async function GET(
       qu_filename: string;
       qu_order: number;
       qu_text: string;
+      qu_explain?: string;
       qu_category: string;
       qu_action: string;
       qu_image?: string;
@@ -803,6 +809,7 @@ export async function GET(
             qu_filename: row.qu_filename,
             qu_order: row.qu_order,
             qu_text: row.qu_text,
+            qu_explain: row.qu_explain,
             qu_category: row.qu_category,
             qu_action: row.qu_action,
             qu_image: row.qu_image,

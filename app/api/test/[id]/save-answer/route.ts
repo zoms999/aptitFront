@@ -147,7 +147,7 @@ export async function POST(
             AND qu.qu_kind1 = 'thk'
             AND qu.qu_filename NOT LIKE '%Index%'
             AND qu.qu_filename NOT LIKE '%index%'
-          ORDER BY qu.qu_order
+          ORDER BY qu.qu_filename, qu.qu_order
           LIMIT 1
         `;
         
@@ -246,7 +246,7 @@ export async function POST(
               AND qu.qu_kind1 = 'img'
               AND qu.qu_filename NOT LIKE '%Index%'
               AND qu.qu_filename NOT LIKE '%index%'
-            ORDER BY qu.qu_order
+            ORDER BY qu.qu_filename, qu.qu_order
             LIMIT 1
           `;
           
@@ -351,15 +351,18 @@ export async function POST(
       qu_filename: string;
       qu_order: number;
       qu_text: string;
+      qu_explain?: string;
       qu_category: string;
       qu_action: string;
-      an_val: number;
-      an_text: string;
-      an_desc: string | null;
-      an_sub: string | null;
-      an_wei: number;
-      choice_image_path?: string;
-      qu_image?: string;
+      qu_images: string[] | null;  // JSON 배열로 변경
+      choices: Array<{
+        an_val: number;
+        an_text: string;
+        an_desc: string | null;
+        an_sub: string | null;
+        an_wei: number;
+        choice_image_path?: string;
+      }> | null;  // JSON 배열로 변경
     }
 
     interface Question {
@@ -367,6 +370,7 @@ export async function POST(
       qu_filename: string;
       qu_order: number;
       qu_text: string;
+      qu_explain?: string;
       qu_category: string;
       qu_action: string;
       qu_image?: string;
@@ -387,44 +391,63 @@ export async function POST(
       // 다국어 테이블이 존재하는지 확인하고, 없으면 기존 방식 사용
       let questionsWithChoices;
       try {
-        // 먼저 다국어 테이블을 사용한 쿼리 시도
-                  questionsWithChoices = await prisma.$queryRaw`
-            SELECT
+        // JSON 집계 함수를 사용한 쿼리 (이미지와 선택지 중복 제거)
+        questionsWithChoices = await prisma.$queryRaw`
+          SELECT
               q.qu_code,
               q.qu_filename,
               q.qu_order,
-              ql.qu_text,
-              ql.qu_category,
               q.qu_action,
-              qc.display_order as an_val,
-              CASE 
-                WHEN qc.display_order = 1 THEN '매우 그렇다'
-                WHEN qc.display_order = 2 THEN '그렇다'
-                WHEN qc.display_order = 3 THEN '약간 그렇다'
-                WHEN qc.display_order = 4 THEN '별로 그렇지 않다'
-                WHEN qc.display_order = 5 THEN '그렇지 않다'
-                WHEN qc.display_order = 6 THEN '전혀 그렇지 않다'
-                ELSE '선택지'
-              END as an_text,
-              null as an_desc,
-              null as an_sub,
-              qc.weight as an_wei,
-              null as choice_image_path,
-              null as qu_image
-            FROM
-              mwd_question q
-            JOIN
-              mwd_question_lang ql ON q.qu_code = ql.qu_code
-            JOIN
-              mwd_question_choice qc ON q.qu_code = qc.qu_code
-            WHERE
+              ql.qu_text,
+              ql.qu_explain,
+              ql.qu_category,
+              
+              -- 1. 질문 이미지들을 하나의 JSON 배열로 집계
+              (
+                  SELECT JSON_AGG(qal_inner.image_path)
+                  FROM mwd_question_asset qa_inner
+                  JOIN mwd_question_asset_lang qal_inner ON qa_inner.asset_id = qal_inner.asset_id
+                  WHERE qa_inner.qu_code = q.qu_code AND qal_inner.lang_code = ${language}
+              ) AS qu_images,
+
+              -- 2. 선택지들을 하나의 JSON 배열로 집계
+              (
+                  SELECT JSON_AGG(
+                      JSON_BUILD_OBJECT(
+                          'an_val', qc_inner.display_order,
+                          'an_text', COALESCE(qcl_inner.choice_text, 
+                              CASE 
+                                  WHEN qc_inner.display_order = 1 THEN '매우 그렇다'
+                                  WHEN qc_inner.display_order = 2 THEN '그렇다'
+                                  WHEN qc_inner.display_order = 3 THEN '약간 그렇다'
+                                  WHEN qc_inner.display_order = 4 THEN '별로 그렇지 않다'
+                                  WHEN qc_inner.display_order = 5 THEN '그렇지 않다'
+                                  WHEN qc_inner.display_order = 6 THEN '전혀 그렇지 않다'
+                                  ELSE '선택지'
+                              END
+                          ),
+                          'choice_image_path', qcl_inner.choice_image_path,
+                          'an_wei', qc_inner.weight,
+                          'an_desc', NULL,
+                          'an_sub', NULL
+                      ) ORDER BY qc_inner.display_order
+                  )
+                  FROM mwd_question_choice qc_inner
+                  LEFT JOIN mwd_question_choice_lang qcl_inner ON qc_inner.choice_id = qcl_inner.choice_id AND qcl_inner.lang_code = ${language}
+                  WHERE qc_inner.qu_code = q.qu_code
+              ) AS choices
+
+          FROM
+              mwd_question AS q
+          LEFT JOIN
+              mwd_question_lang AS ql ON q.qu_code = ql.qu_code
+          WHERE
               q.qu_filename = ${questionFilename}
-              AND q.qu_use = 'Y'
               AND ql.lang_code = ${language}
-            ORDER BY
-              q.qu_order ASC,
-              qc.display_order ASC
-          `;
+              AND q.qu_use = 'Y'
+          ORDER BY
+              q.qu_order ASC
+        `;
       } catch (error) {
         console.log('다국어 테이블 쿼리 실패, 기존 방식으로 폴백:', error);
         // 기존 방식으로 폴백
@@ -545,42 +568,23 @@ export async function POST(
         `;
       }
 
-      // 문항과 선택지를 문항별로 그룹화
-      const questionMap = new Map<string, Question>();
-
+      // 문항과 선택지를 문항별로 그룹화 (JSON 구조 처리)
       if (Array.isArray(questionsWithChoices) && questionsWithChoices.length > 0) {
         (questionsWithChoices as QuestionChoice[]).forEach(row => {
-          if (!questionMap.has(row.qu_code)) {
-            questionMap.set(row.qu_code, {
-              qu_code: row.qu_code,
-              qu_filename: row.qu_filename,
-              qu_order: row.qu_order,
-              qu_text: row.qu_text,
-              qu_category: row.qu_category,
-              qu_action: row.qu_action,
-              qu_image: row.qu_image,
-              qu_images: row.qu_image ? [row.qu_image] : [],
-              choices: []
-            });
-            questions.push(questionMap.get(row.qu_code)!);
-          }
+          const question: Question = {
+            qu_code: row.qu_code,
+            qu_filename: row.qu_filename,
+            qu_order: row.qu_order,
+            qu_text: row.qu_text,
+            qu_explain: row.qu_explain,
+            qu_category: row.qu_category,
+            qu_action: row.qu_action,
+            qu_image: row.qu_images && row.qu_images.length > 0 ? row.qu_images[0] : undefined,
+            qu_images: row.qu_images || [],
+            choices: row.choices || []
+          };
           
-          const question = questionMap.get(row.qu_code)!;
-          
-          // 이미지가 있고 이미 추가되지 않은 경우 추가
-          if (row.qu_image && !question.qu_images?.includes(row.qu_image)) {
-            question.qu_images = question.qu_images || [];
-            question.qu_images.push(row.qu_image);
-          }
-          
-          question.choices.push({
-            an_val: row.an_val,
-            an_text: row.an_text,
-            an_desc: row.an_desc,
-            an_sub: row.an_sub,
-            an_wei: row.an_wei,
-            choice_image_path: row.choice_image_path
-          });
+          questions.push(question);
         });
       }
     }

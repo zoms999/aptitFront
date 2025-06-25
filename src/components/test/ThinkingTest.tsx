@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 
 // 인터페이스는 변경 없이 그대로 사용합니다.
 interface Choice {
@@ -12,6 +12,7 @@ interface Choice {
 interface Question {
   qu_code: string;
   qu_text: string;
+  qu_explain?: string;
   qu_order: number;
   qu_image?: string;
   qu_images?: string[];
@@ -25,8 +26,70 @@ interface ThinkingTestProps {
 }
 
 export default function ThinkingTest({ questions, selectedAnswers, onSelectChoice }: ThinkingTestProps) {
+  // 개발 환경에서만 자동 답변 선택 기능
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
+      const autoSelectAnswers = () => {
+        questions.forEach((question) => {
+          // 이미 답변이 선택되지 않은 문항에 대해서만 자동 선택
+          if (!selectedAnswers[question.qu_code]) {
+            // 사고력 진단의 경우 랜덤하게 선택 (1~5 중에서)
+            const availableChoices = question.choices.filter(choice => choice.an_val >= 1 && choice.an_val <= 5);
+            if (availableChoices.length > 0) {
+              const randomChoice = availableChoices[Math.floor(Math.random() * availableChoices.length)];
+              console.log(`[자동 답변] 문항 ${question.qu_code}: 선택지 ${randomChoice.an_val} 자동 선택`);
+              onSelectChoice(question.qu_code, randomChoice.an_val, randomChoice.an_wei);
+            }
+          }
+        });
+      };
+
+      // 컴포넌트 마운트 후 1초 뒤에 자동 선택 실행
+      const timer = setTimeout(autoSelectAnswers, 1000);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [questions, selectedAnswers, onSelectChoice]);
+
+  // 수동 자동 답변 선택 함수
+  const handleManualAutoSelect = () => {
+    if (process.env.NODE_ENV === 'development') {
+      questions.forEach((question) => {
+        // 사고력 진단의 경우 랜덤하게 선택 (1~5 중에서)
+        const availableChoices = question.choices.filter(choice => choice.an_val >= 1 && choice.an_val <= 5);
+        if (availableChoices.length > 0) {
+          const randomChoice = availableChoices[Math.floor(Math.random() * availableChoices.length)];
+          console.log(`[수동 자동 답변] 문항 ${question.qu_code}: 선택지 ${randomChoice.an_val} 선택`);
+          onSelectChoice(question.qu_code, randomChoice.an_val, randomChoice.an_wei);
+        }
+      });
+    }
+  };
+
   return (
     <div className="relative group">
+      {/* 개발 환경에서만 표시되는 자동 답변 안내 */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="mb-4 p-3 bg-yellow-100 border border-yellow-300 rounded-lg">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              <svg className="w-5 h-5 text-yellow-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span className="text-yellow-800 text-sm font-medium">
+                개발 모드: 사고력 진단 자동 답변이 1초 후 적용됩니다.
+              </span>
+            </div>
+            <button
+              onClick={handleManualAutoSelect}
+              className="px-3 py-1 bg-yellow-600 text-white text-xs font-medium rounded hover:bg-yellow-700 transition-colors"
+            >
+              지금 자동 선택
+            </button>
+          </div>
+        </div>
+      )}
+      
       <div className="absolute -inset-1 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 rounded-3xl blur-xl opacity-20 group-hover:opacity-30 transition duration-500"></div>
       <div className="relative bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/40 p-10 hover:shadow-3xl transition-all duration-500">
         {questions.map((question, questionIndex) => (
@@ -46,6 +109,17 @@ export default function ThinkingTest({ questions, selectedAnswers, onSelectChoic
                 */}
                 <p className="text-xl text-black leading-relaxed font-semibold">{question.qu_text}</p>
                 {/* --- 수정 끝 --- */}
+                
+                {/* 제시문(qu_explain) 표시 */}
+                {question.qu_explain && (
+                  <div className="mt-4 p-4 bg-blue-50/80 backdrop-blur-sm rounded-xl border border-blue-200/50 shadow-sm">
+                    <div className="flex items-center mb-2">
+                      <div className="w-2 h-2 bg-blue-500 rounded-full mr-2"></div>
+                      <span className="text-blue-700 font-medium text-sm">제시문</span>
+                    </div>
+                    <p className="text-gray-700 leading-relaxed whitespace-pre-line">{question.qu_explain}</p>
+                  </div>
+                )}
               </div>
             </div>
             
