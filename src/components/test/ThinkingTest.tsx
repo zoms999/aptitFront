@@ -94,7 +94,44 @@ export default function ThinkingTest({ questions, selectedAnswers, onSelectChoic
   // [수정] isInitialized의 역할을 '최초 렌더링 준비 완료'로 명확히 합니다.
   const [isReady, setIsReady] = useState(false);
 
-  // [2단계] 다음 단계 이동 시 타이머 상태 완전 재설정
+  // 현재 단계 파악 함수
+  const getCurrentStep = (questions: Question[]): string => {
+    if (!questions || questions.length === 0) return 'unknown';
+    const firstCode = questions[0].qu_code;
+    if (firstCode.startsWith('tnd')) return 'tnd';
+    if (firstCode.startsWith('thk')) return 'thk'; 
+    if (firstCode.startsWith('img')) return 'img';
+    return 'unknown';
+  };
+
+  // localStorage에서 특정 단계의 완료된 타이머 상태를 로드하는 함수
+  const getCompletedTimersFromStorage = (step: string): Record<string, boolean> => {
+    try {
+      const key = `completedTimers_${step}`;
+      const stored = localStorage.getItem(key);
+      const result = stored ? JSON.parse(stored) : {};
+      console.log(`[localStorage] ${step} 단계 완료 타이머 로드:`, result);
+      return result;
+    } catch (error) {
+      console.error(`[localStorage] ${step} 단계 완료된 타이머 로드 실패:`, error);
+      return {};
+    }
+  };
+
+  // localStorage에 특정 단계의 완료된 타이머 상태를 저장하는 함수
+  const saveCompletedTimerToStorage = (questionCode: string, step: string) => {
+    try {
+      const key = `completedTimers_${step}`;
+      const completed = getCompletedTimersFromStorage(step);
+      completed[questionCode] = true;
+      localStorage.setItem(key, JSON.stringify(completed));
+      console.log(`[localStorage] ${step} 단계에 ${questionCode} 타이머 완료 상태 저장됨`);
+    } catch (error) {
+      console.error(`[localStorage] ${step} 단계 완료된 타이머 저장 실패:`, error);
+    }
+  };
+
+  // [2단계] 다음 단계 이동 시 타이머 상태 완전 재설정 (localStorage 고려)
   // questions prop이 변경될 때마다 실행되지만, isReady를 false로 되돌리지 않아 깜빡임을 방지합니다.
   useEffect(() => {
     // 안정화된 문항 데이터가 없으면 아무것도 하지 않고, 준비되지 않은 상태로 둡니다.
@@ -107,6 +144,14 @@ export default function ThinkingTest({ questions, selectedAnswers, onSelectChoic
 
     console.log('[2단계] 다음 단계 이동 - 새 문항에 대한 타이머 재설정 시작:', stableQuestions.map(q => q.qu_code));
 
+    // 현재 단계 파악
+    const currentStep = getCurrentStep(stableQuestions);
+    console.log('[2단계] 현재 단계:', currentStep);
+
+    // localStorage에서 현재 단계의 완료된 타이머 목록 로드
+    const completedTimers = getCompletedTimersFromStorage(currentStep);
+    console.log(`[localStorage] ${currentStep} 단계 저장된 완료 타이머:`, completedTimers);
+
     // [핵심] 이전 타이머 상태를 완전히 초기화하고 새로 계산
     const newTimerStates: Record<string, {
       timeLeft: number;
@@ -117,6 +162,7 @@ export default function ThinkingTest({ questions, selectedAnswers, onSelectChoic
 
     let timerCount = 0;
     let noTimerCount = 0;
+    let alreadyCompletedCount = 0;
 
     stableQuestions.forEach((question) => {
       // [엄격한 검증] DB에서 실제 타이머 값이 있는지 확인
@@ -125,24 +171,42 @@ export default function ThinkingTest({ questions, selectedAnswers, onSelectChoic
                            dbTimerValue !== undefined && 
                            Number(dbTimerValue) > 0;
       
+      // localStorage에서 이미 완료된 타이머인지 확인
+      const isAlreadyCompleted = completedTimers[question.qu_code] === true;
+      
       console.log(`[2단계 타이머 검증] ${question.qu_code}:`, {
         qu_time_limit_sec: dbTimerValue,
         type: typeof dbTimerValue,
         hasValidTimer,
+        isAlreadyCompleted,
         willCreateTimer: hasValidTimer
       });
       
       // DB에 실제 양수 타이머 값이 있을 때만 타이머 상태 생성
       if (hasValidTimer) {
         const timeLimitSec = Number(dbTimerValue);
-        newTimerStates[question.qu_code] = {
-          timeLeft: timeLimitSec,
-          isActive: true, // 즉시 활성화
-          isCompleted: false,
-          totalTime: timeLimitSec,
-        };
-        timerCount++;
-        console.log(`[2단계 타이머 생성] ${question.qu_code}: ${timeLimitSec}초 타이머 활성화`);
+        
+        if (isAlreadyCompleted) {
+          // 이미 완료된 타이머는 완료 상태로 설정
+          newTimerStates[question.qu_code] = {
+            timeLeft: 0,
+            isActive: false,
+            isCompleted: true,
+            totalTime: timeLimitSec,
+          };
+          alreadyCompletedCount++;
+          console.log(`[2단계 타이머 복원] ${question.qu_code}: 이미 완료된 타이머 (F5 대응)`);
+        } else {
+          // 새로운 타이머는 활성화 상태로 설정
+          newTimerStates[question.qu_code] = {
+            timeLeft: timeLimitSec,
+            isActive: true,
+            isCompleted: false,
+            totalTime: timeLimitSec,
+          };
+          timerCount++;
+          console.log(`[2단계 타이머 생성] ${question.qu_code}: ${timeLimitSec}초 타이머 활성화`);
+        }
       } else {
         noTimerCount++;
         console.log(`[2단계 타이머 제외] ${question.qu_code}: 타이머 없음 (DB값: ${dbTimerValue})`);
@@ -150,7 +214,7 @@ export default function ThinkingTest({ questions, selectedAnswers, onSelectChoic
     });
 
     // 계산된 새 타이머 상태를 한 번에 업데이트합니다.
-    console.log(`[2단계 타이머 요약] ${timerCount}개 타이머 생성, ${noTimerCount}개 타이머 없음`);
+    console.log(`[2단계 타이머 요약] 새 타이머 ${timerCount}개, 완료된 타이머 ${alreadyCompletedCount}개, 타이머 없음 ${noTimerCount}개`);
     console.log('[2단계 타이머 상태] 최종 타이머 상태:', newTimerStates);
     setTimerStates(newTimerStates);
 
@@ -191,6 +255,9 @@ export default function ThinkingTest({ questions, selectedAnswers, onSelectChoic
               newStates[code].isActive = false;
               newStates[code].isCompleted = true;
               console.log(`[타이머 완료] ${code} 타이머 완료 - 보기가 표시됩니다`);
+              // localStorage에 완료 상태 저장 (F5 대응)
+              const currentStep = getCurrentStep(stableQuestions);
+              saveCompletedTimerToStorage(code, currentStep);
             }
           }
         });
@@ -253,6 +320,9 @@ export default function ThinkingTest({ questions, selectedAnswers, onSelectChoic
           isCompleted: true,
         },
       }));
+      // localStorage에 완료 상태 저장 (F5 대응)
+      const currentStep = getCurrentStep(stableQuestions);
+      saveCompletedTimerToStorage(questionCode, currentStep);
     }
   };
 
@@ -323,6 +393,8 @@ export default function ThinkingTest({ questions, selectedAnswers, onSelectChoic
           const showChoices = !hasTimeLimit || timerIsCompleted;
           // 제시문 표시 조건: 타이머가 없거나 타이머가 진행 중인 경우 (완료되면 숨김)
           const showExplanation = !hasTimeLimit || !timerIsCompleted;
+          // 이미지 표시 조건: 타이머가 없거나 타이머가 진행 중인 경우 (완료되면 숨김)
+          const showImages = !hasTimeLimit || !timerIsCompleted;
 
           // [4단계] 타이머 렌더링 상태 디버깅 로그
           console.log(`[3단계 렌더링] ${question.qu_code}:`, {
@@ -332,6 +404,7 @@ export default function ThinkingTest({ questions, selectedAnswers, onSelectChoic
             hasTimeLimit,
             showChoices,
             showExplanation,
+            showImages,
             timerIsActive,
             timerIsCompleted,
             timerWillRender: hasTimeLimit,
@@ -433,7 +506,7 @@ export default function ThinkingTest({ questions, selectedAnswers, onSelectChoic
                 </div>
               </div>
               
-              {imageCount > 0 && (
+              {imageCount > 0 && showImages && (
                 <div className="mb-8 ml-20">
                   <div className="bg-gray-50/80 p-4 rounded-2xl border border-gray-200/50 shadow-lg">
                     {imageCount === 1 ? (
