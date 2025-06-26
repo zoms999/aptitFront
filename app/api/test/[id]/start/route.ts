@@ -8,10 +8,26 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // console.log('[API 시작] 테스트 시작 API 호출됨');
+    
+    // 🔧 데이터베이스 연결 테스트
+    try {
+      await prisma.$queryRaw`SELECT 1 as test_connection`;
+      // console.log('[DB 연결] 데이터베이스 연결 성공');
+    } catch (dbError) {
+      console.error('[DB 연결] 데이터베이스 연결 실패:', dbError);
+      return NextResponse.json({ 
+        error: '데이터베이스 연결에 실패했습니다',
+        details: dbError instanceof Error ? dbError.message : '알 수 없는 오류'
+      }, { status: 503 });
+    }
+
     // 로그인 세션 확인
     const session = await getServerSession(authOptions);
+    // console.log('[세션 확인] 세션 상태:', session ? '있음' : '없음');
 
     if (!session?.user?.id) {
+      // console.log('[세션 확인] 로그인이 필요함');
       return NextResponse.json({ error: '로그인이 필요합니다' }, { status: 401 });
     }
 
@@ -31,6 +47,8 @@ export async function GET(
     }
 
     // console.log(`테스트 시작 API 호출 - 테스트 ID: ${testId}, 사용자: ${userId}, 언어: ${language}`);
+
+    // qu_time_limit_sec 컬럼은 백엔드에서 COALESCE로 처리하여 항상 number 타입 보장
 
     // 1. 선택 결과 조회
     const accountStatusResult = await prisma.$queryRaw`
@@ -92,7 +110,7 @@ export async function GET(
       let firstQuCode = 'tnd00000';
       if (Array.isArray(firstQuestionResult) && firstQuestionResult.length > 0) {
         firstQuCode = firstQuestionResult[0].qu_code;
-        console.log('[새 테스트 생성] 첫 번째 실제 문항 코드:', firstQuCode);
+        // console.log('[새 테스트 생성] 첫 번째 실제 문항 코드:', firstQuCode);
       }
 
       // 새 answer_progress 생성 (실제 첫 번째 문항 코드 사용)
@@ -184,7 +202,7 @@ export async function GET(
       nextQuestion = nextQuestionResult[0];
           } else {
       // 다음 질문이 없을 경우 현재 단계의 첫 번째 실제 문항을 가져오기
-      console.log('[문항조회] 다음 질문이 없어 현재 단계의 첫 번째 문항을 조회합니다');
+      // console.log('[문항조회] 다음 질문이 없어 현재 단계의 첫 번째 문항을 조회합니다');
       
       // 현재 진행 단계 확인
       const currentStepResult = await prisma.$queryRaw`
@@ -197,11 +215,11 @@ export async function GET(
       if (Array.isArray(currentStepResult) && currentStepResult.length > 0) {
         const progress = currentStepResult[0];
         currentStep = progress.anp_step || 'tnd';
-        console.log('[문항조회] 현재 진행 상태:', {
-          anp_step: progress.anp_step,
-          qu_code: progress.qu_code,
-          anp_done: progress.anp_done
-        });
+        // console.log('[문항조회] 현재 진행 상태:', {
+        //   anp_step: progress.anp_step,
+        //   qu_code: progress.qu_code,
+        //   anp_done: progress.anp_done
+        // });
       }
       
       // 먼저 현재 진행 중인 qu_code의 qu_filename을 조회
@@ -217,7 +235,7 @@ export async function GET(
           
           if (Array.isArray(currentQuResult) && currentQuResult.length > 0) {
             currentQuFilename = currentQuResult[0].qu_filename;
-            console.log('[문항조회] 현재 진행 중인 문항의 qu_filename:', currentQuFilename);
+            // console.log('[문항조회] 현재 진행 중인 문항의 qu_filename:', currentQuFilename);
           }
         }
       }
@@ -249,7 +267,7 @@ export async function GET(
       
       if (Array.isArray(firstQuestionResult) && firstQuestionResult.length > 0) {
         nextQuestion = firstQuestionResult[0];
-        console.log('[문항조회] 첫 번째 문항 조회 결과:', nextQuestion);
+        // console.log('[문항조회] 첫 번째 문항 조회 결과:', nextQuestion);
       }
       
       // 현재 진행 중인 qu_filename이 있으면 우선 사용
@@ -270,13 +288,13 @@ export async function GET(
           // nextQuestion이 있으면 qu_filename만 업데이트
           nextQuestion.qu_filename = currentQuFilename;
         }
-        console.log('[문항조회] 현재 진행 중인 qu_filename으로 설정:', currentQuFilename);
+        // console.log('[문항조회] 현재 진행 중인 qu_filename으로 설정:', currentQuFilename);
       }
     }
 
     // 기본값 설정 (문항을 찾지 못한 경우)
     if (!nextQuestion) {
-      console.log('[문항조회] 문항을 찾지 못해 기본값을 설정합니다');
+      // console.log('[문항조회] 문항을 찾지 못해 기본값을 설정합니다');
       
       // 현재 진행 상태 재확인
       const currentStepCheckResult = await prisma.$queryRaw`
@@ -295,7 +313,7 @@ export async function GET(
         
         // 현재 qu_code가 더미 코드(00000)인 경우 실제 첫 번째 문항으로 업데이트
         if (currentQuCode && currentQuCode.includes('00000')) {
-          console.log('[문항조회] 더미 qu_code 감지, 실제 첫 번째 문항을 찾습니다:', currentQuCode);
+          // console.log('[문항조회] 더미 qu_code 감지, 실제 첫 번째 문항을 찾습니다:', currentQuCode);
           
           const realFirstQuestionResult = await prisma.$queryRaw`
             SELECT qu.qu_code, qu.qu_filename
@@ -322,11 +340,11 @@ export async function GET(
               WHERE anp_seq = ${anpSeq}
             `;
             
-            console.log('[문항조회] 더미 qu_code를 실제 문항으로 업데이트:', {
-              old: currentQuCode,
-              new: defaultQuCode,
-              filename: defaultQuFilename
-            });
+            // console.log('[문항조회] 더미 qu_code를 실제 문항으로 업데이트:', {
+            //   old: currentQuCode,
+            //   new: defaultQuCode,
+            //   filename: defaultQuFilename
+            // });
           }
         } else if (currentQuCode) {
           // 현재 qu_code의 qu_filename 조회
@@ -339,7 +357,7 @@ export async function GET(
           if (Array.isArray(currentQuResult) && currentQuResult.length > 0) {
             defaultQuFilename = currentQuResult[0].qu_filename;
             defaultQuCode = currentQuCode;
-            console.log('[문항조회] 기본값에 현재 qu_code의 qu_filename 사용:', defaultQuFilename);
+            // console.log('[문항조회] 기본값에 현재 qu_code의 qu_filename 사용:', defaultQuFilename);
           }
         }
       }
@@ -355,26 +373,31 @@ export async function GET(
         pd_kind: accountStatus.pd_kind || "basic"
       };
       
-      console.log('[문항조회] 기본값으로 설정된 nextQuestion:', nextQuestion);
+      // console.log('[문항조회] 기본값으로 설정된 nextQuestion:', nextQuestion);
     }
 
     // 4. 현재 페이지에 표시할 문항과 답변 선택지 조회
     let questionFilename = nextQuestion.qu_filename;
-    console.log('[문항조회] 조회할 문항 파일명:', questionFilename);
+    // console.log('[문항조회] 조회할 문항 파일명:', questionFilename);
 
     // 다국어 테이블이 존재하는지 확인하고, 없으면 기존 방식 사용
     let questionsWithChoices;
     try {
+      // console.log('[문항조회] ===== 쿼리 실행 시작 =====');
+      // console.log('[문항조회] nextQuestion.step:', nextQuestion.step);
+      // console.log('[문항조회] questionFilename:', questionFilename);
+      // console.log('[문항조회] language:', language);
+      
       // 먼저 다국어 테이블을 사용한 쿼리 시도
       // 사고력 진단의 경우 같은 파일명으로 문제를 그룹핑하여 조회
       if (nextQuestion.step === 'thk') {
+        // console.log('[문항조회] 사고력 진단 쿼리 실행 중...');
         questionsWithChoices = await prisma.$queryRaw`
           SELECT
               q.qu_code,
               q.qu_filename,
               q.qu_order,
-              q.qu_action,
-              q.qu_time_limit_sec,
+              COALESCE(q.qu_time_limit_sec, 0)::integer as qu_time_limit_sec,
               ql.qu_text,
               ql.qu_explain,
               ql.qu_category,
@@ -424,6 +447,7 @@ export async function GET(
           ORDER BY
               q.qu_order ASC
         `;
+        // console.log('[문항조회] 사고력 진단 쿼리 실행 완료');
       } else {
         // 성향진단 등 다른 단계는 기존 로직 유지
         questionsWithChoices = await prisma.$queryRaw`
@@ -431,8 +455,7 @@ export async function GET(
               q.qu_code,
               q.qu_filename,
               q.qu_order,
-              q.qu_action,
-              q.qu_time_limit_sec,
+              COALESCE(q.qu_time_limit_sec, 0)::integer as qu_time_limit_sec,
               ql.qu_text,
               ql.qu_explain,
               ql.qu_category,
@@ -484,7 +507,7 @@ export async function GET(
       
       // 결과가 없으면 단계별로 문항 조회
       if (!Array.isArray(questionsWithChoices) || questionsWithChoices.length === 0) {
-        console.log('[문항조회] 파일명으로 문항을 찾지 못했습니다. 단계별로 조회합니다.');
+        // console.log('[문항조회] 파일명으로 문항을 찾지 못했습니다. 단계별로 조회합니다.');
         // 현재 진행 중인 단계 확인
         const currentStepResult = await prisma.$queryRaw`
           SELECT anp_step, qu_code
@@ -496,11 +519,11 @@ export async function GET(
           ? currentStepResult[0].anp_step 
           : nextQuestion.step;
           
-        console.log('[문항조회] 현재 진행 단계:', currentStep, '다음 문항 단계:', nextQuestion.step);
+        // console.log('[문항조회] 현재 진행 단계:', currentStep, '다음 문항 단계:', nextQuestion.step);
         
         // nextQuestion의 step도 현재 단계로 업데이트
         if (currentStep !== nextQuestion.step) {
-          console.log(`[문항조회] nextQuestion.step을 ${nextQuestion.step}에서 ${currentStep}으로 업데이트`);
+          // console.log(`[문항조회] nextQuestion.step을 ${nextQuestion.step}에서 ${currentStep}으로 업데이트`);
           nextQuestion.step = currentStep;
           nextQuestion.qu_code = `${currentStep}00000`;
           nextQuestion.qu_filename = `${currentStep}00000`;
@@ -508,7 +531,7 @@ export async function GET(
         
         // Index 파일이거나 문항이 없으면 첫 번째 실제 문항 파일명 찾기
         if (questionFilename.includes('Index') || questionFilename.includes('index') || questionFilename.includes('00000')) {
-          console.log('[문항조회] Index 파일명이므로 첫 번째 실제 문항을 찾습니다.');
+          // console.log('[문항조회] Index 파일명이므로 첫 번째 실제 문항을 찾습니다.');
           
           const firstRealQuestionResult = await prisma.$queryRaw`
             SELECT DISTINCT q.qu_filename
@@ -526,7 +549,7 @@ export async function GET(
           
           if (Array.isArray(firstRealQuestionResult) && firstRealQuestionResult.length > 0) {
             const realQuFilename = firstRealQuestionResult[0].qu_filename;
-            console.log('[문항조회] 첫 번째 실제 문항 파일명:', realQuFilename);
+            // console.log('[문항조회] 첫 번째 실제 문항 파일명:', realQuFilename);
             
             // nextQuestion과 questionFilename 업데이트
             nextQuestion.qu_filename = realQuFilename;
@@ -539,7 +562,7 @@ export async function GET(
               SET qu_code = ${realQuFilename}
               WHERE anp_seq = ${anpSeq}
             `;
-            console.log('[문항조회] mwd_answer_progress 테이블 업데이트 완료:', realQuFilename);
+            // console.log('[문항조회] mwd_answer_progress 테이블 업데이트 완료:', realQuFilename);
           }
         }
         
@@ -550,8 +573,7 @@ export async function GET(
               q.qu_code,
               q.qu_filename,
               q.qu_order,
-              q.qu_action,
-              q.qu_time_limit_sec,
+              COALESCE(q.qu_time_limit_sec, 0)::integer as qu_time_limit_sec,
               ql.qu_text,
               ql.qu_explain,
               ql.qu_category,
@@ -608,8 +630,7 @@ export async function GET(
               q.qu_code,
               q.qu_filename,
               q.qu_order,
-              q.qu_action,
-              q.qu_time_limit_sec,
+              COALESCE(q.qu_time_limit_sec, 0)::integer as qu_time_limit_sec,
               ql.qu_text,
               ql.qu_explain,
               ql.qu_category,
@@ -683,6 +704,7 @@ export async function GET(
           q.qu_code,
           q.qu_filename,
           q.qu_order,
+          COALESCE(q.qu_time_limit_sec, 0)::integer as qu_time_limit_sec,
           COALESCE(q.qu_explain, '질문 텍스트') as qu_text,
           'default' as qu_category,
           q.qu_action,
@@ -705,6 +727,7 @@ export async function GET(
           q.qu_code,
           q.qu_filename,
           q.qu_order,
+          COALESCE(q.qu_time_limit_sec, 0)::integer as qu_time_limit_sec,
           COALESCE(q.qu_explain, '질문 텍스트') as qu_text,
           'default' as qu_category,
           q.qu_action,
@@ -727,6 +750,7 @@ export async function GET(
           q.qu_code,
           q.qu_filename,
           q.qu_order,
+          COALESCE(q.qu_time_limit_sec, 0)::integer as qu_time_limit_sec,
           COALESCE(q.qu_explain, '질문 텍스트') as qu_text,
           'default' as qu_category,
           q.qu_action,
@@ -749,6 +773,7 @@ export async function GET(
           q.qu_code,
           q.qu_filename,
           q.qu_order,
+          COALESCE(q.qu_time_limit_sec, 0)::integer as qu_time_limit_sec,
           COALESCE(q.qu_explain, '질문 텍스트') as qu_text,
           'default' as qu_category,
           q.qu_action,
@@ -771,6 +796,7 @@ export async function GET(
           q.qu_code,
           q.qu_filename,
           q.qu_order,
+          COALESCE(q.qu_time_limit_sec, 0)::integer as qu_time_limit_sec,
           COALESCE(q.qu_explain, '질문 텍스트') as qu_text,
           'default' as qu_category,
           q.qu_action,
@@ -793,6 +819,7 @@ export async function GET(
           q.qu_code,
           q.qu_filename,
           q.qu_order,
+          COALESCE(q.qu_time_limit_sec, 0)::integer as qu_time_limit_sec,
           COALESCE(q.qu_explain, '질문 텍스트') as qu_text,
           'default' as qu_category,
           q.qu_action,
@@ -814,12 +841,7 @@ export async function GET(
       `;
     }
 
-    console.log('[문항조회] 문항 조회 결과 개수:', Array.isArray(questionsWithChoices) ? questionsWithChoices.length : 0);
-    if (Array.isArray(questionsWithChoices) && questionsWithChoices.length > 0) {
-      console.log('[문항조회] 문항 조회 결과 샘플:', questionsWithChoices.slice(0, 1));
-    } else {
-      console.log('[문항조회] 문항 조회 결과: 데이터 없음');
-    }
+    // console.log('[문항조회] 문항 조회 결과 개수:', Array.isArray(questionsWithChoices) ? questionsWithChoices.length : 0);
 
     // 문항과 선택지를 문항별로 그룹화
     interface QuestionChoice {
@@ -866,6 +888,21 @@ export async function GET(
 
     if (Array.isArray(questionsWithChoices) && questionsWithChoices.length > 0) {
       (questionsWithChoices as QuestionChoice[]).forEach(row => {
+        // [핵심] DB에서 가져온 타이머 값을 정확하게 처리하여 다음 단계 이동 시에도 타이머가 바로 표시되도록 합니다.
+        let finalTimeLimitSec: number | null = null;
+        
+        // DB 원본 값 확인 및 강화된 검증
+        const dbTimerValue = row.qu_time_limit_sec;
+        console.log(`[타이머 검증] ${row.qu_code}: DB값=${dbTimerValue} (타입: ${typeof dbTimerValue})`);
+        
+        // DB에 실제 양수 값이 있을 때만 타이머 설정 (더 엄격한 조건)
+        if (dbTimerValue !== null && dbTimerValue !== undefined && Number(dbTimerValue) > 0) {
+          finalTimeLimitSec = Number(dbTimerValue);
+          console.log(`[타이머 확정] ${row.qu_code}: ${finalTimeLimitSec}초 타이머 설정 → 프론트엔드에서 표시됨`);
+        } else {
+          console.log(`[타이머 제외] ${row.qu_code}: 타이머 없음 (DB값: ${dbTimerValue}) → 프론트엔드에서 숨김`);
+        }
+        
         const question: Question = {
           qu_code: row.qu_code,
           qu_filename: row.qu_filename,
@@ -874,7 +911,8 @@ export async function GET(
           qu_explain: row.qu_explain,
           qu_category: row.qu_category,
           qu_action: row.qu_action,
-          qu_time_limit_sec: row.qu_time_limit_sec,
+          // qu_action: row.qu_action, // qu_action은 개별 문항이 아닌 페이지 단위 액션이므로 제거하는 것이 좋습니다.
+          qu_time_limit_sec: finalTimeLimitSec, // 처리된 타이머 값 사용
           qu_images: row.qu_images || [],
           choices: row.choices || []
         };
@@ -946,7 +984,7 @@ export async function GET(
         
         // 성향 진단이 완료되지 않았는데 다른 단계에 있는 경우 성향 진단으로 되돌리기
         if (tndCompleted < tndTotal) {
-          console.log('[문항조회] 성향 진단이 완료되지 않아 tnd 단계로 되돌립니다');
+          // console.log('[문항조회] 성향 진단이 완료되지 않아 tnd 단계로 되돌립니다');
           
           await prisma.$queryRaw`
             UPDATE mwd_answer_progress 
@@ -967,7 +1005,7 @@ export async function GET(
           totalQuestions = tndTotal;
           currentStep = 'tnd';
           
-          console.log('[문항조회] 성향 진단 단계로 복원 완료');
+          // console.log('[문항조회] 성향 진단 단계로 복원 완료');
         }
       }
     }
@@ -990,20 +1028,65 @@ export async function GET(
       }
     };
 
-    console.log('[문항조회] 최종 응답 데이터:', {
-      step: responseData.step,
-      questions_count: responseData.questions.length,
-      qu_filename: responseData.qu_filename,
-      completed_pages: responseData.completed_pages,
-      total_questions: responseData.total_questions
+    // [핵심] 다음 단계 이동 시 타이머 문제 해결을 위한 최종 검증
+    console.log('[API 응답 검증] 프론트엔드로 전달될 문항별 타이머 값:');
+    let timerCount = 0;
+    let noTimerCount = 0;
+    
+    responseData.questions.forEach((q: Question) => {
+      const hasTimer = q.qu_time_limit_sec !== null && q.qu_time_limit_sec !== undefined && Number(q.qu_time_limit_sec) > 0;
+      if (hasTimer) {
+        timerCount++;
+        console.log(`✅ ${q.qu_code}: ${q.qu_time_limit_sec}초 타이머 (프론트엔드 표시됨)`);
+      } else {
+        noTimerCount++;
+        console.log(`❌ ${q.qu_code}: ${q.qu_time_limit_sec} (프론트엔드 숨김)`);
+      }
     });
+    
+    console.log(`[타이머 최종 요약] 총 ${responseData.questions.length}개 문항 중 타이머 ${timerCount}개, 타이머 없음 ${noTimerCount}개`);
+    
+    // console.log('[문항조회] 최종 응답 데이터 요약:', {
+    //   step: responseData.step,
+    //   questions_count: responseData.questions.length,
+    //   qu_filename: responseData.qu_filename,
+    //   completed_pages: responseData.completed_pages,
+    //   total_questions: responseData.total_questions,
+    //   questions_with_timer: responseData.questions.filter((q: Question) => q.qu_time_limit_sec && Number(q.qu_time_limit_sec) > 0).length
+    // });
+    
     return NextResponse.json(responseData);
 
   } catch (error) {
     console.error('테스트 시작 API 오류:', error);
+    
+    // 🔧 상세한 오류 정보 제공
+    let errorMessage = '테스트 정보를 가져오는 중 오류가 발생했습니다';
+    let statusCode = 500;
+    
+    if (error instanceof Error) {
+      console.error('[오류 상세]', {
+        name: error.name,
+        message: error.message,
+        stack: error.stack
+      });
+      
+      // Prisma 관련 오류 처리
+      if (error.message.includes('connect') || error.message.includes('connection')) {
+        errorMessage = '데이터베이스 연결에 실패했습니다';
+        statusCode = 503;
+      } else if (error.message.includes('permission') || error.message.includes('access')) {
+        errorMessage = '데이터베이스 접근 권한이 없습니다';
+        statusCode = 403;
+      }
+    }
+    
     return NextResponse.json(
-      { error: '테스트 정보를 가져오는 중 오류가 발생했습니다' },
-      { status: 500 }
+      { 
+        error: errorMessage,
+        details: process.env.NODE_ENV === 'development' && error instanceof Error ? error.message : undefined
+      },
+      { status: statusCode }
     );
   }
 } 

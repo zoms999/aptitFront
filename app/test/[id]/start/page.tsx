@@ -46,6 +46,7 @@ interface Question {
   qu_action: string;
   qu_image?: string;
   qu_images?: string[];
+  qu_time_limit_sec?: number | null;
   choices: Choice[];
 }
 
@@ -133,7 +134,18 @@ export default function TestStartPage({ params }: TestStartPageProps) {
       
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || '테스트 데이터를 가져오는데 실패했습니다');
+        console.error('[API 오류]', {
+          status: response.status,
+          statusText: response.statusText,
+          errorData: errorData
+        });
+        
+        let errorMessage = errorData.error || '테스트 데이터를 가져오는데 실패했습니다';
+        if (errorData.details) {
+          errorMessage += ` (상세: ${errorData.details})`;
+        }
+        
+        throw new Error(errorMessage);
       }
       
       const data = await response.json();
@@ -142,6 +154,40 @@ export default function TestStartPage({ params }: TestStartPageProps) {
       console.log('questions 배열 길이:', data.questions ? data.questions.length : 'undefined');
       console.log('API 응답 step:', data.step);
       console.log('API 응답 debug_info:', data.debug_info);
+      
+      // [1단계] API 응답에서 각 문항의 qu_time_limit_sec 값을 엄격하게 검증
+      if (data.questions && Array.isArray(data.questions)) {
+        console.log('[타이머 검증] 다음 단계 이동 시 문항별 타이머 값 검증 시작');
+        
+        const questionsWithTimer: string[] = [];
+        const questionsWithoutTimer: string[] = [];
+        
+        data.questions.forEach((question: Question) => {
+          const dbTimerValue = question.qu_time_limit_sec;
+          const hasValidTimer = dbTimerValue !== null && 
+                               dbTimerValue !== undefined && 
+                               Number(dbTimerValue) > 0;
+          
+          if (hasValidTimer) {
+            questionsWithTimer.push(`${question.qu_code}(${dbTimerValue}초)`);
+          } else {
+            questionsWithoutTimer.push(`${question.qu_code}(${dbTimerValue})`);
+          }
+          
+          console.log(`[타이머 검증] ${question.qu_code}:`, {
+            qu_time_limit_sec: dbTimerValue,
+            type: typeof dbTimerValue,
+            hasValidTimer,
+            willShowTimer: hasValidTimer
+          });
+        });
+        
+        console.log('[타이머 요약] 타이머가 있는 문항:', questionsWithTimer);
+        console.log('[타이머 요약] 타이머가 없는 문항:', questionsWithoutTimer);
+        console.log(`[타이머 요약] 전체 ${data.questions.length}개 문항 중 ${questionsWithTimer.length}개에 타이머 표시됨`);
+      } else {
+        console.log('[타이머 검증] questions 배열이 없거나 비어있음:', data.questions);
+      }
       
       // API에서 제공하는 진행률 정보 사용
       const currentNumber = data.current_number || data.completed_pages + 1 || 1;
@@ -437,7 +483,7 @@ export default function TestStartPage({ params }: TestStartPageProps) {
           )}
 
           {/* 디버깅 정보 */}
-          {process.env.NODE_ENV === 'development' && (
+          {/* {process.env.NODE_ENV === 'development' && (
             <div className="mb-4 p-4 bg-yellow-100 rounded-lg">
               <h3 className="font-bold text-yellow-800">디버깅 정보:</h3>
               <p>testData 존재: {testData ? 'true' : 'false'}</p>
@@ -450,7 +496,7 @@ export default function TestStartPage({ params }: TestStartPageProps) {
               <p>isThinkingTest: {isThinkingTest ? 'true' : 'false'}</p>
               <p>isImagePreferenceTest: {isImagePreferenceTest ? 'true' : 'false'}</p>
             </div>
-          )}
+          )} */}
 
           {/* 테스트 완료 모달이 우선 표시되어야 함 */}
           {testData && testData.isStepCompleted ? (

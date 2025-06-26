@@ -126,26 +126,26 @@ export default function PreferenceTest({
               {/* 메인 이미지 섹션 */}
               <div className="relative group/main-image mb-10">
                 <div className="absolute -inset-2 bg-gradient-to-r from-purple-400 via-pink-400 to-rose-400 rounded-3xl blur-lg opacity-20 group-hover/main-image:opacity-40 transition duration-500"></div>
-                <div className="relative bg-gradient-to-br from-white via-purple-50/30 to-pink-50/30 backdrop-blur-lg border border-white/60 rounded-3xl p-8 shadow-xl hover:shadow-2xl transition-all duration-500">
-                  <div className="w-full max-w-4xl mx-auto">
+                <div className="relative bg-gradient-to-br from-white via-purple-50/30 to-pink-50/30 backdrop-blur-lg border border-white/60 rounded-3xl p-6 shadow-xl hover:shadow-2xl transition-all duration-500">
+                  <div className="w-full max-w-2xl mx-auto">
                     {question.qu_images && question.qu_images.length > 0 ? (
                       question.qu_images.length === 1 ? (
                         <div className="relative overflow-hidden rounded-2xl shadow-2xl group/image">
                           <img 
                             src={question.qu_images[0]} 
                             alt="검사 이미지" 
-                            className="w-full h-auto transition-all duration-500 group-hover/image:scale-105"
+                            className="w-full h-auto transition-all duration-500 group-hover/image:scale-105 max-w-lg mx-auto"
                           />
                           <div className="absolute inset-0 bg-gradient-to-t from-black/10 via-transparent to-transparent opacity-0 group-hover/image:opacity-100 transition duration-300"></div>
                         </div>
                       ) : (
-                        <div className="grid grid-cols-1 gap-6">
+                        <div className="grid grid-cols-1 gap-4">
                           {question.qu_images.map((image, imgIndex) => (
                             <div key={imgIndex} className="relative overflow-hidden rounded-2xl shadow-2xl group/image">
                               <img 
                                 src={image} 
                                 alt={`검사 이미지 ${imgIndex + 1}`} 
-                                className="w-full h-auto transition-all duration-500 group-hover/image:scale-105"
+                                className="w-full h-auto transition-all duration-500 group-hover/image:scale-105 max-w-lg mx-auto"
                               />
                               <div className="absolute inset-0 bg-gradient-to-t from-black/10 via-transparent to-transparent opacity-0 group-hover/image:opacity-100 transition duration-300"></div>
                             </div>
@@ -153,12 +153,12 @@ export default function PreferenceTest({
                         </div>
                       )
                     ) : (
-                      <div className="relative bg-gradient-to-br from-gray-100 via-purple-50 to-pink-50 rounded-2xl p-16 text-center border border-gray-200/50">
+                      <div className="relative bg-gradient-to-br from-gray-100 via-purple-50 to-pink-50 rounded-2xl p-12 text-center border border-gray-200/50">
                         <div className="relative">
-                          <svg className="w-24 h-24 text-gray-400 mx-auto mb-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                           </svg>
-                          <p className="text-gray-500 text-xl font-medium">검사 이미지</p>
+                          <p className="text-gray-500 text-lg font-medium">검사 이미지</p>
                         </div>
                       </div>
                     )}
@@ -184,9 +184,9 @@ export default function PreferenceTest({
                       }`}
                     >
                       {choice.choice_image_path ? (
-                        <div className="flex flex-col items-center space-y-4">
+                        <div className="flex flex-col items-center space-y-3">
                           <div className="relative">
-                            <div className="w-24 h-24 rounded-2xl overflow-hidden shadow-lg group-hover/choice:shadow-xl transition-all duration-300">
+                            <div className="w-16 h-16 rounded-2xl overflow-hidden shadow-lg group-hover/choice:shadow-xl transition-all duration-300">
                               <img 
                                 src={choice.choice_image_path} 
                                 alt={`선택지 ${choice.an_val}`} 
@@ -198,19 +198,19 @@ export default function PreferenceTest({
                             )}
                           </div>
                           {choice.an_text && (
-                            <span className="text-lg font-semibold leading-relaxed">{choice.an_text}</span>
+                            <span className="text-base font-semibold leading-relaxed">{choice.an_text}</span>
                           )}
                         </div>
                       ) : (
                         <div className="flex flex-col items-center space-y-3">
-                          <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-bold transition-all duration-300 ${
+                          <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-lg font-bold transition-all duration-300 ${
                             selectedAnswers[question.qu_code] === choice.an_val
                               ? 'bg-white/20 text-white'
                               : 'bg-gradient-to-br from-purple-500 to-pink-600 text-white shadow-lg'
                           }`}>
                             {choice.an_val}
                           </div>
-                          <span className="text-lg font-semibold leading-relaxed">{choice.an_text}</span>
+                          <span className="text-base font-semibold leading-relaxed">{choice.an_text}</span>
                         </div>
                       )}
                       
