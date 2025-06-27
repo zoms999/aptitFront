@@ -351,6 +351,10 @@ export async function POST(
       qu_filename: string;
       qu_order: number;
       qu_time_limit_sec?: number | null;
+      qu_template_type?: string | null;  // 템플릿 유형 추가
+      qu_title?: string;  // 문제 제목 추가
+      qu_passage?: string;  // 지문 추가
+      qu_instruction?: string;  // 지시문 추가
       qu_text: string;
       qu_explain?: string;
       qu_category: string;
@@ -371,6 +375,10 @@ export async function POST(
       qu_filename: string;
       qu_order: number;
       qu_time_limit_sec?: number | null;
+      qu_template_type?: string | null;  // 템플릿 유형 추가
+      qu_title?: string;  // 문제 제목 추가
+      qu_passage?: string;  // 지문 추가
+      qu_instruction?: string;  // 지시문 추가
       qu_text: string;
       qu_explain?: string;
       qu_category: string;
@@ -399,7 +407,11 @@ export async function POST(
               q.qu_filename,
               q.qu_order,
               COALESCE(q.qu_time_limit_sec, 0)::integer as qu_time_limit_sec,
+              q.qu_template_type,
               q.qu_action,
+              ql.qu_title,
+              ql.qu_passage,
+              ql.qu_instruction,
               ql.qu_text,
               ql.qu_explain,
               ql.qu_category,
@@ -459,6 +471,7 @@ export async function POST(
             q.qu_filename,
             q.qu_order,
             COALESCE(q.qu_time_limit_sec, 0)::integer as qu_time_limit_sec,
+            q.qu_template_type,
             COALESCE(q.qu_explain, '질문 텍스트') as qu_text,
             'default' as qu_category,
             q.qu_action,
@@ -479,6 +492,7 @@ export async function POST(
             q.qu_filename,
             q.qu_order,
             COALESCE(q.qu_time_limit_sec, 0)::integer as qu_time_limit_sec,
+            q.qu_template_type,
             COALESCE(q.qu_explain, '질문 텍스트') as qu_text,
             'default' as qu_category,
             q.qu_action,
@@ -499,6 +513,7 @@ export async function POST(
             q.qu_filename,
             q.qu_order,
             COALESCE(q.qu_time_limit_sec, 0)::integer as qu_time_limit_sec,
+            q.qu_template_type,
             COALESCE(q.qu_explain, '질문 텍스트') as qu_text,
             'default' as qu_category,
             q.qu_action,
@@ -519,6 +534,7 @@ export async function POST(
             q.qu_filename,
             q.qu_order,
             COALESCE(q.qu_time_limit_sec, 0)::integer as qu_time_limit_sec,
+            q.qu_template_type,
             COALESCE(q.qu_explain, '질문 텍스트') as qu_text,
             'default' as qu_category,
             q.qu_action,
@@ -539,6 +555,7 @@ export async function POST(
             q.qu_filename,
             q.qu_order,
             COALESCE(q.qu_time_limit_sec, 0)::integer as qu_time_limit_sec,
+            q.qu_template_type,
             COALESCE(q.qu_explain, '질문 텍스트') as qu_text,
             'default' as qu_category,
             q.qu_action,
@@ -559,6 +576,7 @@ export async function POST(
             q.qu_filename,
             q.qu_order,
             COALESCE(q.qu_time_limit_sec, 0)::integer as qu_time_limit_sec,
+            q.qu_template_type,
             COALESCE(q.qu_explain, '질문 텍스트') as qu_text,
             'default' as qu_category,
             q.qu_action,
@@ -584,6 +602,10 @@ export async function POST(
             qu_filename: row.qu_filename,
             qu_order: row.qu_order,
             qu_time_limit_sec: row.qu_time_limit_sec,
+            qu_template_type: row.qu_template_type,
+            qu_title: row.qu_title,
+            qu_passage: row.qu_passage,
+            qu_instruction: row.qu_instruction,
             qu_text: row.qu_text,
             qu_explain: row.qu_explain,
             qu_category: row.qu_category,

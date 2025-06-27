@@ -21,6 +21,7 @@ export interface Question {
   qu_category: string;
   qu_action: string;
   qu_time_limit_sec?: number | null;
+  qu_template_type?: string | null;  // 템플릿 유형
   qu_images?: string[];
   choices: Choice[];
 }

@@ -13,6 +13,7 @@ interface QuestionChoice {
   qu_category: string;
   qu_action: string;
   qu_time_limit_sec?: number | null;
+  qu_template_type?: string | null;  // 템플릿 유형 추가
   qu_images: string[] | null;
   join_status?: string;
   actual_lang_code?: string;
@@ -88,6 +89,7 @@ export async function getThinkingQuestionsWithLang(
         q.qu_filename,
         q.qu_order,
         COALESCE(q.qu_time_limit_sec, 0)::integer as qu_time_limit_sec,
+        q.qu_template_type,
         ql.qu_title,
         ql.qu_passage,
         ql.qu_instruction,
@@ -159,6 +161,7 @@ export async function getThinkingQuestionsWithLang(
     if (thk06090Result) {
       console.log(`🔍 [thk06090 쿼리 결과] 상세 분석:`, {
         qu_code: thk06090Result.qu_code,
+        qu_template_type: thk06090Result.qu_template_type || 'NULL',
         qu_passage_type: typeof thk06090Result.qu_passage,
         qu_passage_value: thk06090Result.qu_passage,
         qu_passage_length: thk06090Result.qu_passage ? thk06090Result.qu_passage.length : 0,
@@ -187,6 +190,7 @@ export async function getThinkingQuestionsFallback(questionFilename: string): Pr
         q.qu_filename,
         q.qu_order,
         COALESCE(q.qu_time_limit_sec, 0)::integer as qu_time_limit_sec,
+        q.qu_template_type,
         COALESCE(q.qu_explain, q.qu_text, '질문 텍스트') as qu_text,
         '' as qu_title,
         '' as qu_passage,
@@ -244,9 +248,10 @@ function processThinkingQuestions(questionsWithChoices: QuestionChoice[]): Quest
         console.log(`[사고력진단 타이머 제외] ${row.qu_code}: 타이머 없음 (DB값: ${dbTimerValue}) → 프론트엔드에서 숨김`);
       }
       
-      // qu_passage 강화된 디버깅 로그
+      // qu_passage 및 qu_template_type 강화된 디버깅 로그
       if (row.qu_code.startsWith('thk')) {
         console.log(`[사고력진단 qu_passage 디버깅] ${row.qu_code}:`, {
+          qu_template_type: row.qu_template_type || 'NULL',
           qu_title: row.qu_title && row.qu_title.trim() !== '' ? `있음(${row.qu_title.length}자)` : '없음/빈값',
           qu_passage: row.qu_passage && row.qu_passage.trim() !== '' ? `있음(${row.qu_passage.length}자)` : '없음/빈값',
           qu_instruction: row.qu_instruction && row.qu_instruction.trim() !== '' ? `있음(${row.qu_instruction.length}자)` : '없음/빈값',
@@ -305,6 +310,7 @@ function processThinkingQuestions(questionsWithChoices: QuestionChoice[]): Quest
         qu_category: row.qu_category,
         qu_action: row.qu_action || '/test/savestep',
         qu_time_limit_sec: finalTimeLimitSec, // 처리된 타이머 값 사용
+        qu_template_type: row.qu_template_type, // 템플릿 유형 추가
         qu_images: row.qu_images || [],
         choices: row.choices || []
       };
