@@ -88,6 +88,23 @@ export default function ThinkingTest({ questions, selectedAnswers, onSelectChoic
         qu_text: q.qu_text ? `있음(${q.qu_text.length}자)` : '없음',
         raw_passage: q.qu_passage === null ? 'NULL' : q.qu_passage === undefined ? 'UNDEFINED' : `"${q.qu_passage}"`
       })));
+      
+      // thk06090에 대한 특별 디버깅
+      const thk06090Question = questions.find(q => q.qu_code === 'thk06090');
+      if (thk06090Question) {
+        console.log(`🔍 [ThinkingTest.tsx thk06090] 프론트엔드 수신 상태:`, {
+          qu_code: thk06090Question.qu_code,
+          qu_passage_raw: thk06090Question.qu_passage,
+          qu_passage_type: typeof thk06090Question.qu_passage,
+          qu_passage_length: thk06090Question.qu_passage ? thk06090Question.qu_passage.length : 0,
+          qu_passage_is_null: thk06090Question.qu_passage === null,
+          qu_passage_is_undefined: thk06090Question.qu_passage === undefined,
+          qu_passage_is_empty_string: thk06090Question.qu_passage === '',
+          qu_passage_trim_length: thk06090Question.qu_passage ? thk06090Question.qu_passage.trim().length : 0,
+          will_render_passage: thk06090Question.qu_passage && thk06090Question.qu_passage.trim() !== '',
+          qu_passage_preview: thk06090Question.qu_passage ? thk06090Question.qu_passage.substring(0, 200) + '...' : 'null/undefined'
+        });
+      }
     
     // [5단계] 문항별 타이머 상태 요약
     const timersCount = questions.filter(q => q.qu_time_limit_sec !== null && q.qu_time_limit_sec !== undefined && Number(q.qu_time_limit_sec) > 0).length;
@@ -582,6 +599,22 @@ export default function ThinkingTest({ questions, selectedAnswers, onSelectChoic
                           <p>qu_instruction: {question.qu_instruction || '없음'}</p>
                           <p>qu_title과 qu_text 중복: {question.qu_title && question.qu_title.trim() === question.qu_text.trim() ? '예 (도입부 숨김)' : '아니오'}</p>
                           <p>렌더링 조건: {question.qu_passage && question.qu_passage.trim() !== '' ? '조건 만족 (표시됨)' : '조건 불만족 (숨겨짐)'}</p>
+                          {question.qu_code === 'thk06090' && (
+                            <>
+                              <hr className="my-2 border-gray-300" />
+                              <p className="font-bold text-red-600">🔍 thk06090 특별 디버깅:</p>
+                              <p>qu_passage 타입: {typeof question.qu_passage}</p>
+                              <p>qu_passage === null: {question.qu_passage === null ? 'true' : 'false'}</p>
+                              <p>qu_passage === undefined: {question.qu_passage === undefined ? 'true' : 'false'}</p>
+                              <p>qu_passage === (빈 문자열): {question.qu_passage === '' ? 'true' : 'false'}</p>
+                              <p>qu_passage trim 결과: {question.qu_passage ? `[${question.qu_passage.trim()}]` : 'N/A'}</p>
+                              <p>qu_passage trim 길이: {question.qu_passage ? question.qu_passage.trim().length : 0}</p>
+                              <p>렌더링 조건 상세: {question.qu_passage ? 'qu_passage 존재' : 'qu_passage 없음'} && {question.qu_passage && question.qu_passage.trim() !== '' ? 'trim 후 빈값 아님' : 'trim 후 빈값'}</p>
+                              {question.qu_passage && (
+                                <p>qu_passage 미리보기: {question.qu_passage.substring(0, 100)}...</p>
+                              )}
+                            </>
+                          )}
                         </div>
                       </div>
                     )
