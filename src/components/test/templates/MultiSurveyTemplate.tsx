@@ -4,8 +4,43 @@ import { TemplateProps } from './types';
 export default function MultiSurveyTemplate({ testData, selectedAnswers, onSelectChoice }: TemplateProps) {
   const questions = testData.questions;
 
+  // ⭐️ 1. 자동 선택 버튼 클릭 시 실행될 핸들러 함수
+  const handleAutoSelect = () => {
+    // 안전장치: 개발 환경이 아니면 아무것도 실행하지 않음
+    if (process.env.NODE_ENV !== 'development') {
+      return;
+    }
+
+    console.log('DEV: 자동 선택 기능 실행');
+
+    questions.forEach((question) => {
+      // 각 문항에 선택지가 있는지 확인
+      if (question.choices && question.choices.length > 0) {
+        // 선택지 중 하나를 무작위로 선택
+        const randomIndex = Math.floor(Math.random() * question.choices.length);
+        const randomChoice = question.choices[randomIndex];
+        
+        // onSelectChoice 함수를 호출하여 상태 업데이트
+        onSelectChoice(question.qu_code, randomChoice.an_val, randomChoice.an_wei);
+      }
+    });
+  };
+
+
   return (
     <div className="relative group">
+      
+      {/* ⭐️ 2. 자동 선택 버튼 (개발용) */}
+      {process.env.NODE_ENV === 'development' && (
+        <button
+          onClick={handleAutoSelect}
+          className="fixed bottom-5 right-5 z-50 px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-full shadow-lg hover:bg-indigo-700 transition-all transform hover:scale-105"
+          title="모든 문항에 대해 랜덤 답변을 선택합니다."
+        >
+          🚀 자동 선택 (Dev)
+        </button>
+      )}
+
       <div className="absolute -inset-1 bg-gradient-to-r from-slate-600 via-gray-600 to-zinc-600 rounded-3xl blur-xl opacity-20 group-hover:opacity-30 transition duration-500"></div>
       <div className="relative bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/40 p-10 hover:shadow-3xl transition-all duration-500">
         
@@ -70,4 +105,4 @@ export default function MultiSurveyTemplate({ testData, selectedAnswers, onSelec
       </div>
     </div>
   );
-} 
+}
