@@ -18,6 +18,7 @@ export default function ThinkingTest({ questions, selectedAnswers, onSelectChoic
     
     console.log('[ThinkingTest] 템플릿 시스템으로 문항 로드:', questions.map(q => ({
       qu_code: q.qu_code,
+      qu_order: q.qu_order,
       qu_template_type: q.qu_template_type || 'PURE_TEXT_QUESTION',
       qu_time_limit_sec: q.qu_time_limit_sec,
       hasValidTimer: q.qu_time_limit_sec !== null && q.qu_time_limit_sec !== undefined && Number(q.qu_time_limit_sec) > 0
@@ -25,6 +26,30 @@ export default function ThinkingTest({ questions, selectedAnswers, onSelectChoic
     
     return questions;
   }, [questions]);
+
+  // 답변 상태 모니터링
+  React.useEffect(() => {
+    if (stableQuestions.length > 0) {
+      const answeredQuestions = Object.keys(selectedAnswers);
+      const unansweredQuestions = stableQuestions
+        .filter(q => !selectedAnswers[q.qu_code])
+        .map(q => ({ qu_code: q.qu_code, qu_order: q.qu_order }))
+        .sort((a, b) => a.qu_order - b.qu_order);
+      
+      console.log('[ThinkingTest] 답변 상태 분석:', {
+        총문항수: stableQuestions.length,
+        답변완료: answeredQuestions.length,
+        미답변: unansweredQuestions.length,
+        미답변문항: unansweredQuestions.map(q => `${q.qu_code}(순서:${q.qu_order})`),
+        완료율: `${answeredQuestions.length}/${stableQuestions.length}`
+      });
+
+      // 116개에서 멈춘 문제 디버깅
+      if (answeredQuestions.length === 116 && stableQuestions.length === 122) {
+        console.warn('🚨 [ThinkingTest] 116/122에서 멈춤 감지! 미답변 문항들:', unansweredQuestions);
+      }
+    }
+  }, [stableQuestions, selectedAnswers]);
 
   // 템플릿 타입별로 문항들을 그룹화
   const groupedQuestions = useMemo(() => {
@@ -42,11 +67,12 @@ export default function ThinkingTest({ questions, selectedAnswers, onSelectChoic
       groups[templateType].push(question);
     });
     
-    console.log('[ThinkingTest] 템플릿별 문항 그룹화 완료:', Object.keys(groups).map(key => ({
-      templateType: key,
-      count: groups[key].length,
-      questions: groups[key].map(q => q.qu_code)
-    })));
+         console.log('[ThinkingTest] 템플릿별 문항 그룹화 완료:', Object.keys(groups).map(key => ({
+       templateType: key,
+       count: groups[key].length,
+       questions: groups[key].map(q => q.qu_code),
+       questionsWithOrder: groups[key].map(q => `${q.qu_code}(${q.qu_order})`).sort()
+     })));
     
     return groups;
   }, [stableQuestions]);

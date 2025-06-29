@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { TemplateProps } from './types';
 
-// 1. 컴포넌트 이름 변경: TimedImageSequenceTemplate -> TimedProblemTemplate
 export default function TimedProblemTemplate({ testData, selectedAnswers, onSelectChoice }: TemplateProps) {
   const questions = testData.questions;
   
@@ -13,8 +12,9 @@ export default function TimedProblemTemplate({ testData, selectedAnswers, onSele
     }
   }>({});
 
+  // 타이머 관련 로직
   useEffect(() => {
-    const initialStates: { [key: string]: any } = {};
+    const initialStates: { [key:string]: any } = {};
     questions.forEach(question => {
       const timeLimit = question.qu_time_limit_sec || 30;
       initialStates[question.qu_code] = {
@@ -50,17 +50,36 @@ export default function TimedProblemTemplate({ testData, selectedAnswers, onSele
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const handleSkipTimer = (questionCode: string) => {
+    if (process.env.NODE_ENV !== 'development') return;
+    setTimerStates(prev => ({
+      ...prev,
+      [questionCode]: {
+        ...prev[questionCode],
+        timeLeft: 0,
+        isActive: false,
+        isCompleted: true,
+      },
+    }));
+  };
+
+  // 이미지 레이아웃 설정 함수
+  const getImageLayoutConfig = (imageCount: number) => {
+    if (imageCount === 1) return { gridCols: 'grid-cols-1', imageHeight: 'h-80 md:h-96', maxWidth: 'max-w-md mx-auto' };
+    if (imageCount === 2) return { gridCols: 'grid-cols-1 md:grid-cols-2', imageHeight: 'h-64 md:h-80', maxWidth: 'max-w-4xl mx-auto' };
+    if (imageCount <= 4) return { gridCols: 'grid-cols-2', imageHeight: 'h-48 md:h-56', maxWidth: 'max-w-4xl mx-auto' };
+    if (imageCount <= 6) return { gridCols: 'grid-cols-2 md:grid-cols-3', imageHeight: 'h-44 md:h-48', maxWidth: 'max-w-6xl mx-auto' };
+    return { gridCols: 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4', imageHeight: 'h-36 md:h-40', maxWidth: 'max-w-7xl mx-auto' };
+  };
+
   return (
-    <div className="relative group w-full max-w-7xl mx-auto">
+    <div className="relative group">
       <div className="absolute -inset-1 bg-gradient-to-r from-orange-600 via-red-600 to-pink-600 rounded-3xl blur-xl opacity-20 group-hover:opacity-30 transition duration-500"></div>
-      <div className="relative bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/40 p-10 hover:shadow-3xl transition-all duration-500">
+      <div className="relative bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/40 p-6 md:p-10 hover:shadow-3xl transition-all duration-500">
         
-        <div className="mb-8 text-center">
-          <div className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-orange-100 to-red-100 rounded-full">
-            <svg className="w-5 h-5 text-orange-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-            {/* 2. UI 텍스트 일반화 */}
-            <span className="text-orange-800 font-semibold text-sm">{testData.test_name || '시간 제한 문제'}</span>
-          </div>
+        <div className="mb-10 text-center">
+            <h2 className="text-2xl font-bold text-slate-800">{testData.test_name || '시간 제한 문제'}</h2>
+            <p className="text-sm text-slate-500 mt-1">제한 시간 안에 문제를 해결해주세요.</p>
         </div>
         
         {questions.map((question, questionIndex) => {
@@ -70,35 +89,57 @@ export default function TimedProblemTemplate({ testData, selectedAnswers, onSele
             isCompleted: false, 
           };
           
+          // ✅ [핵심 수정 1] 렌더링할 이미지를 상태에 따라 먼저 결정합니다.
+          let imagesToRender = question.qu_images || [];
+          if (timerState.isCompleted) {
+            if (question.qu_code === 'thk02020') {
+              // thk02020 문항이고 타이머가 완료되면, 첫 번째 이미지를 제외한 배열을 사용합니다.
+              imagesToRender = imagesToRender.slice(1);
+            } else {
+              // 다른 모든 문항은 타이머 완료 시 이미지를 비웁니다.
+              imagesToRender = [];
+            }
+          }
+          
+          // ✅ [핵심 수정 2] 실제 렌더링될 이미지의 개수를 기반으로 레이아웃을 설정합니다.
+          const layoutConfig = getImageLayoutConfig(imagesToRender.length);
+
           return (
-            <div key={question.qu_code} className={`transition-opacity duration-300 ${questionIndex > 0 ? 'border-t border-gray-100 pt-10 mt-10' : ''}`}>
+            <div key={question.qu_code} className={`transition-opacity duration-300 ${questionIndex > 0 ? 'border-t border-gray-200/80 pt-8 mt-8' : ''}`}>
               
-              {/* 문항 번호와 내용 (이전과 동일) */}
-              <div className="flex items-start mb-8">
-                <div className="relative group/number"><div className="absolute -inset-1 bg-gradient-to-r from-orange-500 to-red-600 rounded-2xl blur opacity-60 group-hover/number:opacity-100 transition"></div><div className="relative w-14 h-14 bg-gradient-to-br from-orange-500 to-red-600 rounded-2xl flex items-center justify-center mr-6 flex-shrink-0 shadow-xl transition-all hover:scale-110 hover:rotate-3"><span className="text-white font-bold text-lg">{question.qu_order}</span></div></div>
-                <div className="flex-1 pt-2">
-                  {question.qu_title && <div className="mb-4"><p className="text-gray-600 text-base leading-relaxed">{question.qu_title}</p></div>}
-                  {question.qu_instruction && (<div className="mt-6 px-5 py-4 bg-orange-50 rounded-lg border-l-4 border-orange-400"><p className="text-slate-700 text-base leading-relaxed">{question.qu_instruction}</p></div>)}
-                  <div className="mt-8 p-4 bg-gradient-to-r from-orange-50 to-red-50 rounded-xl border border-orange-200"><p className="text-xl text-black leading-relaxed font-semibold">{question.qu_text}</p></div>
+              <div className="mb-6">
+                <div className="flex items-baseline gap-3 md:gap-4">
+                  <span className="text-2xl font-bold text-orange-600 flex-shrink-0">
+                    {question.qu_order}.
+                  </span>
+                  <p className="text-xl text-slate-800 leading-relaxed font-semibold">
+                    {question.qu_title || question.qu_text}
+                  </p>
                 </div>
               </div>
 
-              {/* 타이머 컨트롤 UI */}
-              <div className="mb-8 ml-20">
-                <div className="p-6 bg-gradient-to-r from-red-50 to-orange-50 rounded-xl border-2 border-red-200/50 shadow-lg">
-                  <div className="flex items-center space-x-4">
-                    <div className={`w-12 h-12 rounded-full flex items-center justify-center ${timerState.isActive ? 'bg-red-500 animate-pulse' : 'bg-gray-500'}`}>
-                      <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                    </div>
-                    <div>
-                      <div className={`text-2xl font-bold ${timerState.timeLeft <= 5 ? 'text-red-600' : 'text-orange-700'}`}>
-                        {formatTime(timerState.timeLeft)}
+              {/* 타이머 UI */}
+              <div className="mb-6">
+                <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-xl shadow-sm">
+                  <div className="flex items-center justify-between space-x-4">
+                    <div className="flex items-center space-x-4">
+                      <div className={`w-12 h-12 rounded-full flex items-center justify-center ${timerState.isActive ? 'bg-red-500 animate-pulse' : 'bg-gray-500'}`}>
+                        <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                       </div>
-                      <div className="text-sm text-gray-600">
-                        {/* 2. UI 텍스트 일반화 */}
-                        {timerState.isActive ? '제한 시간 내에 문제를 푸세요' : '시간 종료 - 답을 선택하세요'}
+                      <div>
+                        <div className={`text-2xl font-bold ${timerState.timeLeft <= 5 ? 'text-red-600' : 'text-gray-700'}`}>
+                          {formatTime(timerState.timeLeft)}
+                        </div>
+                        <div className="text-sm text-gray-600">
+                          {timerState.isActive ? '제한 시간' : '시간 종료 - 답을 선택하세요'}
+                        </div>
                       </div>
                     </div>
+                    {process.env.NODE_ENV === 'development' && timerState.isActive && (
+                      <button onClick={() => handleSkipTimer(question.qu_code)} className="px-3 py-1 bg-sky-500 text-white text-xs font-bold rounded-full shadow hover:bg-sky-600 transition-all transform hover:scale-105" title="개발용: 타이머를 즉시 종료합니다.">
+                        스킵
+                      </button>
+                    )}
                   </div>
                   <div className="mt-4">
                     <div className="w-full bg-gray-200 rounded-full h-2.5">
@@ -108,23 +149,30 @@ export default function TimedProblemTemplate({ testData, selectedAnswers, onSele
                 </div>
               </div>
 
-              {/* 3. 이미지가 있을 때만 이미지 섹션을 렌더링 */}
-              {timerState.isActive && question.qu_images && question.qu_images.length > 0 && (
-                <div className="mb-8 ml-20">
-                  <div className="bg-gradient-to-br from-orange-50 to-red-50 p-8 rounded-2xl border-2 border-orange-200/50 shadow-lg">
-                    {/* 이미지 순서 기억하라는 텍스트 제거 -> qu_instruction에서 지시 */}
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                      {question.qu_images.map((img, i) => (
-                        <div key={i} className="relative group"><div className="absolute -inset-1 bg-gradient-to-r from-orange-400 to-red-500 rounded-xl blur opacity-0 group-hover:opacity-50 transition"></div><div className="relative bg-white p-2 rounded-xl shadow-lg"><div className="text-center mb-2"><span className="inline-flex items-center justify-center w-6 h-6 bg-gradient-to-r from-orange-500 to-red-600 text-white text-sm font-bold rounded-full">{i + 1}</span></div><img src={img} alt={`문제 이미지 ${i + 1}`} className="w-full h-32 object-cover rounded-lg transform transition-transform group-hover:scale-105" /></div></div>
+              {/* ✅ 이미지 표시 영역: 보여줄 이미지가 있을 때만 렌더링됩니다. */}
+              {imagesToRender.length > 0 && (
+                <div className="mb-8">
+                  <div className={`${layoutConfig.maxWidth} mx-auto`}>
+                    <div className={`grid ${layoutConfig.gridCols} gap-4`}>
+                      {imagesToRender.map((img, i) => (
+                        <div key={i} className="relative group/image w-full p-2 bg-white rounded-xl shadow-md transform transition-transform hover:scale-105">
+                          <div className={`w-full ${layoutConfig.imageHeight} flex items-center justify-center bg-slate-50 rounded-lg overflow-hidden`}>
+                            <img 
+                              src={img} 
+                              alt={`문제 이미지 ${i + 1}`} 
+                              className="max-w-full max-h-full object-contain"
+                            />
+                          </div>
+                        </div>
                       ))}
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* 답변 단계일 때 선택지 표시 */}
+              {/* 답변 선택지 표시 영역: 타이머가 완료되면 렌더링. 위치는 변경되지 않았습니다. */}
               {timerState.isCompleted && (
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 ml-20 animate-fade-in">
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-fade-in">
                   {question.choices.map((choice) => (
                     <div key={choice.an_val} className="relative group/choice">
                       <div className={`absolute -inset-0.5 rounded-xl blur opacity-0 group-hover/choice:opacity-60 transition ${selectedAnswers[question.qu_code] === choice.an_val ? 'bg-gradient-to-r from-orange-500 to-red-600 opacity-75' : 'bg-gradient-to-r from-orange-400 to-red-500'}`}></div>

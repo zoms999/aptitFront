@@ -74,13 +74,69 @@ export default function TestStartPage({ params }: TestStartPageProps) {
   // 테스트 ID
   const testId = parseInt(resolvedParams.id, 10);
 
+  // sessionStorage 키들
+  const getStorageKeys = () => ({
+    testData: `test_data_${testId}`,
+    selectedAnswers: `test_answers_${testId}`,
+    currentImageNumber: `test_image_number_${testId}`,
+    lastUpdateTime: `test_last_update_${testId}`
+  });
+
+  // sessionStorage에서 데이터 복원 (현재 비활성화 - 데이터베이스 초기화로 인해)
+  // const restoreFromStorage = () => { ... } // 주석 처리됨
+
+  // sessionStorage에 데이터 저장 (현재 비활성화 - DB 초기화 테스트 중)
+  // const saveToStorage = (testData: TestData, answers: Record<string, number>, imageNumber: number) => {
+  //   try {
+  //     const keys = getStorageKeys();
+  //     sessionStorage.setItem(keys.testData, JSON.stringify(testData));
+  //     sessionStorage.setItem(keys.selectedAnswers, JSON.stringify(answers));
+  //     sessionStorage.setItem(keys.currentImageNumber, imageNumber.toString());
+  //     sessionStorage.setItem(keys.lastUpdateTime, Date.now().toString());
+  //     
+  //     console.log('sessionStorage에 데이터 저장 완료');
+  //   } catch (error) {
+  //     console.error('sessionStorage 저장 실패:', error);
+  //   }
+  // };
+
+  // sessionStorage 데이터 정리 (완전 초기화)
+  const clearStorage = () => {
+    try {
+      const keys = getStorageKeys();
+      sessionStorage.removeItem(keys.testData);
+      sessionStorage.removeItem(keys.selectedAnswers);
+      sessionStorage.removeItem(keys.currentImageNumber);
+      sessionStorage.removeItem(keys.lastUpdateTime);
+      
+      // 추가로 모든 테스트 관련 localStorage도 정리
+      const keysToRemove = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && (key.includes('test_') || key.includes('completedTimers_'))) {
+          keysToRemove.push(key);
+        }
+      }
+      keysToRemove.forEach(key => localStorage.removeItem(key));
+      
+      console.log('🧹 모든 저장된 테스트 데이터 정리 완료 (sessionStorage + localStorage)');
+    } catch (error) {
+      console.error('저장소 정리 실패:', error);
+    }
+  };
+
   useEffect(() => {
     // 인증 상태 확인
     console.log('useEffect 실행, status:', status);
     
     // 개발 환경에서는 인증 상태와 관계없이 테스트 데이터 로드
     if (process.env.NODE_ENV === 'development') {
-      console.log('개발 환경에서 fetchTestData 호출');
+      console.log('🔄 개발 환경 - 항상 최신 DB 상태로 시작');
+      
+      // 🔥 F5 새로고침 시에도 항상 저장소 정리하고 DB에서 최신 데이터 가져오기
+      clearStorage(); // 모든 저장된 데이터 정리
+      setSelectedAnswers({}); // 답변 상태 초기화
+      setCurrentImageNumber(2); // 이미지 번호 초기화
       fetchTestData();
       return;
     }
@@ -97,28 +153,68 @@ export default function TestStartPage({ params }: TestStartPageProps) {
     }
 
     if (status === 'authenticated') {
-      console.log('인증된 사용자, fetchTestData 호출');
+      console.log('🔄 인증된 사용자 - 항상 최신 DB 상태로 시작');
+      
+      // 🔥 F5 새로고침 시에도 항상 저장소 정리하고 DB에서 최신 데이터 가져오기
+      clearStorage(); // 모든 저장된 데이터 정리
+      setSelectedAnswers({}); // 답변 상태 초기화
+      setCurrentImageNumber(2); // 이미지 번호 초기화
       fetchTestData();
     }
   }, [status, router, testId]);
 
   // 테스트 데이터가 로드되었을 때 자동으로 답변 선택
   useEffect(() => {
-    // 테스트 목적으로 답변 자동 선택 (성향 진단만 해당)
-    if (testData && testData.questions && testData.questions.length > 0 && testData.step === 'tnd') {
-      const autoAnswers: Record<string, number> = {};
-      
-      // 각 문항에 대해 임의의 답변 선택 (1~6 사이의 값)
-      testData.questions.forEach(question => {
-        // 임의의 답변 생성 (1~6 사이)
-        const randomAnswer = Math.floor(Math.random() * 6) + 1;
-        autoAnswers[question.qu_code] = randomAnswer;
-      });
-      
-      console.log('테스트용 답변 자동 선택:', autoAnswers);
-      setSelectedAnswers(autoAnswers);
+    // 테스트 목적으로 답변 자동 선택 (성향 진단과 사고력 진단 모두 해당)
+    if (testData && testData.questions && testData.questions.length > 0 && (testData.step === 'tnd' || testData.step === 'thk')) {
+      const timer = setTimeout(() => {
+        const autoAnswers: Record<string, number> = {};
+        let newAnswersCount = 0;
+        
+        // 각 문항에 대해 임의의 답변 선택 (아직 답변하지 않은 문항만)
+        testData.questions.forEach(question => {
+          // 이미 답변한 문항은 건너뛰기
+          if (selectedAnswers[question.qu_code]) {
+            return;
+          }
+
+          if (question.choices && question.choices.length > 0) {
+            // 실제 선택지 중에서 임의로 선택
+            const availableChoices = question.choices.filter(choice => choice.an_val >= 1);
+            if (availableChoices.length > 0) {
+              const randomChoice = availableChoices[Math.floor(Math.random() * availableChoices.length)];
+              autoAnswers[question.qu_code] = randomChoice.an_val;
+              newAnswersCount++;
+            }
+          } else {
+            // 선택지가 없는 경우 기본값 (성향 진단용)
+            const randomAnswer = Math.floor(Math.random() * 6) + 1;
+            autoAnswers[question.qu_code] = randomAnswer;
+            newAnswersCount++;
+          }
+        });
+        
+        if (newAnswersCount > 0) {
+          console.log(`🤖 [자동답변] ${testData.step} 단계에서 ${newAnswersCount}개 문항 자동 답변:`, autoAnswers);
+          setSelectedAnswers(prev => ({
+            ...prev,
+            ...autoAnswers
+          }));
+        } else {
+          console.log(`✅ [자동답변] ${testData.step} 단계의 모든 문항이 이미 답변됨`);
+        }
+      }, 1500); // 1.5초 후 자동 답변 (템플릿 로딩 대기)
+
+      return () => clearTimeout(timer);
     }
-  }, [testData]);
+  }, [testData, selectedAnswers]);
+
+  // selectedAnswers가 변경될 때마다 sessionStorage에 저장 (현재 비활성화 - DB 초기화 테스트 중)
+  // useEffect(() => {
+  //   if (testData && Object.keys(selectedAnswers).length > 0) {
+  //     saveToStorage(testData, selectedAnswers, currentImageNumber);
+  //   }
+  // }, [selectedAnswers, testData, currentImageNumber]);
 
   // 테스트 데이터 가져오기
   const fetchTestData = async () => {
@@ -214,7 +310,19 @@ export default function TestStartPage({ params }: TestStartPageProps) {
       console.log('enhancedData.questions:', enhancedData.questions);
       console.log('enhancedData.questions 길이:', enhancedData.questions ? enhancedData.questions.length : 'undefined');
       setTestData(enhancedData);
-      console.log('setTestData 호출 완료, step:', enhancedData.step, 'test_step:', enhancedData.test_step);
+      
+      // 새로운 데이터를 받았으므로 selectedAnswers 초기화
+      setSelectedAnswers({});
+      
+      console.log('🔄 데이터베이스에서 최신 테스트 데이터 로드 완료:', {
+        step: enhancedData.step,
+        test_step: enhancedData.test_step,
+        첫번째문항: enhancedData.questions?.[0]?.qu_code,
+        총문항수: enhancedData.questions?.length,
+        완료페이지: enhancedData.completed_pages,
+        총페이지: enhancedData.total_questions,
+        메시지: 'F5 새로고침 시에도 항상 DB 최신 상태 반영'
+      });
     } catch (err) {
       console.error('테스트 데이터 로드 오류:', err);
       setError(err instanceof Error ? err.message : '오류가 발생했습니다');
@@ -253,6 +361,9 @@ export default function TestStartPage({ params }: TestStartPageProps) {
       // TestCompletionModal에서 호출된 경우 (단계 완료 후 다음 단계 시작)
       if (testData.isStepCompleted) {
         console.log('단계 완료 모달에서 다음 단계 시작 요청');
+        
+        // 저장된 데이터 정리
+        clearStorage();
         
         // isStepCompleted를 false로 초기화하고 새로운 테스트 데이터 가져오기
         setTestData(prev => prev ? ({
@@ -313,6 +424,9 @@ export default function TestStartPage({ params }: TestStartPageProps) {
             total_questions: data.total_questions
           });
           
+          // 단계 완료 시 저장된 데이터 정리
+          clearStorage();
+          
           setTestData(prev => prev ? ({
             ...prev,
             questions: [],
@@ -335,15 +449,17 @@ export default function TestStartPage({ params }: TestStartPageProps) {
         
         // 다음 문항 데이터로 업데이트
         if (data.questions && data.questions.length > 0) {
-          setTestData(prev => prev ? ({
-            ...prev,
+          const updatedTestData = {
+            ...testData,
             ...data.nextQuestion,
             questions: data.questions,
-            test_step: getTestStep(data.nextQuestion?.step || prev.step),
+            test_step: getTestStep(data.nextQuestion?.step || testData.step),
             // 완료 페이지와 총 페이지 수 정보 업데이트
             completed_pages: data.completed_pages,
             total_questions: data.total_questions
-          }) : null);
+          };
+          
+          setTestData(updatedTestData);
           
           // 상태 업데이트 후 확인 로그
           setTimeout(() => {
@@ -354,9 +470,14 @@ export default function TestStartPage({ params }: TestStartPageProps) {
           }, 0);
           
           // 이미지 번호 증가
-          setCurrentImageNumber(prev => (prev % 10) + 1);
+          const newImageNumber = (currentImageNumber % 10) + 1;
+          setCurrentImageNumber(newImageNumber);
+          
           // 선택 답변 초기화
           setSelectedAnswers({});
+          
+          // 새로운 상태를 sessionStorage에 저장 (현재 비활성화)
+          // saveToStorage(updatedTestData, {}, newImageNumber);
         }
       }
     } catch (err) {
@@ -469,7 +590,10 @@ export default function TestStartPage({ params }: TestStartPageProps) {
 
       {/* 컨텐츠 영역 */}
       <div className="flex-grow relative z-10">
-        <div className="max-w-6xl mx-auto px-4 py-8">
+        {/* ▼▼▼▼▼ 여기가 수정된 부분입니다 ▼▼▼▼▼ */}
+        <div className="max-w-7xl mx-auto px-4 py-8">
+        {/* ▲▲▲▲▲ 여기가 수정된 부분입니다 ▲▲▲▲▲ */}
+
           {/* 성향 진단 단계명 표시 */}
           {isPersonalityTest && (
             <div className="mb-8">
@@ -555,4 +679,4 @@ export default function TestStartPage({ params }: TestStartPageProps) {
       </div>
     </div>
   );
-} 
+}
