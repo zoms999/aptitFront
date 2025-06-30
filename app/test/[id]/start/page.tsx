@@ -629,41 +629,43 @@ export default function TestStartPage({ params }: TestStartPageProps) {
               currentStep={testData.prev_step || testData.step}
             />
           ) : testData && testData.questions && testData.questions.length > 0 ? (
-            <div className="space-y-8">
-              {/* 1. 성향 진단 */}
-              {isPersonalityTest && (
-                <PersonalityTest
-                  questions={testData.questions}
-                  selectedAnswers={selectedAnswers}
-                  onSelectChoice={handleSelectChoice}
-                />
-              )}
+            <>
+              <div className="space-y-8">
+                {/* 1. 성향 진단 */}
+                {isPersonalityTest && (
+                  <PersonalityTest
+                    questions={testData.questions}
+                    selectedAnswers={selectedAnswers}
+                    onSelectChoice={handleSelectChoice}
+                  />
+                )}
 
-              {/* 2. 사고력 진단 */}
-              {isThinkingTest && (
-                <ThinkingTest
-                  questions={testData.questions}
-                  selectedAnswers={selectedAnswers}
-                  onSelectChoice={handleSelectChoice}
-                />
-              )}
+                {/* 2. 사고력 진단 */}
+                {isThinkingTest && (
+                  <ThinkingTest
+                    questions={testData.questions}
+                    selectedAnswers={selectedAnswers}
+                    onSelectChoice={handleSelectChoice}
+                  />
+                )}
 
-              {/* 3. 선호도 진단 */}
-              {isImagePreferenceTest && (
-                <PreferenceTest
-                  questions={testData.questions}
-                  selectedAnswers={selectedAnswers}
-                  onSelectChoice={handleSelectChoice}
-                  currentImageNumber={currentImageNumber}
-                />
-              )}
+                {/* 3. 선호도 진단 */}
+                {isImagePreferenceTest && (
+                  <PreferenceTest
+                    questions={testData.questions}
+                    selectedAnswers={selectedAnswers}
+                    onSelectChoice={handleSelectChoice}
+                    currentImageNumber={currentImageNumber}
+                  />
+                )}
+              </div>
 
-              {/* 다음 버튼 */}
+              {/* 다음 버튼 - space-y-8 컨테이너 밖으로 분리 */}
               <TestNavButton
                 onClick={handleNextQuestion}
                 isSubmitting={isSubmitting}
               />
-            </div>
+            </>
           ) : (
             <div className="text-center p-12 bg-white/90 backdrop-blur-md rounded-3xl shadow-2xl border border-white/30 hover:shadow-3xl transition-all duration-300">
               <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-gray-400 to-gray-600 rounded-2xl mb-6 shadow-lg">

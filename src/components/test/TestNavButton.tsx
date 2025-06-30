@@ -1,3 +1,5 @@
+import React from 'react';
+
 interface TestNavButtonProps {
   onClick: () => void;
   isSubmitting: boolean;
@@ -5,7 +7,8 @@ interface TestNavButtonProps {
 
 export default function TestNavButton({ onClick, isSubmitting }: TestNavButtonProps) {
   return (
-    <div className="flex justify-center mt-16">
+    // mt-8을 mt-4로 수정하여 상단 여백을 더 줄였습니다.
+    <div className="flex justify-center mt-4">
       <div className="relative group">
         <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 rounded-3xl blur-lg opacity-60 group-hover:opacity-100 transition duration-300 animate-pulse"></div>
         <button
@@ -44,4 +47,4 @@ export default function TestNavButton({ onClick, isSubmitting }: TestNavButtonPr
       </div>
     </div>
   );
-} 
+}

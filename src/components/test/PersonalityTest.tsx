@@ -89,7 +89,7 @@ export default function PersonalityTest({ questions, selectedAnswers, onSelectCh
 
   return (
     <div className="relative group">
-      {process.env.NODE_ENV === 'development' && (
+      {/* {process.env.NODE_ENV === 'development' && (
         <div className="mb-4 p-3 bg-indigo-100 border border-indigo-300 rounded-lg">
           <div className="flex items-center justify-between">
             <div className="flex items-center">
@@ -103,7 +103,7 @@ export default function PersonalityTest({ questions, selectedAnswers, onSelectCh
             </button>
           </div>
         </div>
-      )}
+      )} */}
       
       <div className="absolute -inset-1 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 rounded-3xl blur-xl opacity-20 group-hover:opacity-30 transition duration-500"></div>
       <div className="relative bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/40 p-6 md:p-10 hover:shadow-3xl transition-all duration-500">
