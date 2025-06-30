@@ -9,6 +9,11 @@ module.exports = {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ['var(--font-nanum-square-neo-variable)', 'Apple SD Gothic Neo', 'Malgun Gothic', 'sans-serif'],
+        nanum: ['var(--font-nanum-square-neo)', 'Apple SD Gothic Neo', 'Malgun Gothic', 'sans-serif'],
+        'nanum-variable': ['var(--font-nanum-square-neo-variable)', 'Apple SD Gothic Neo', 'Malgun Gothic', 'sans-serif'],
+      },
       colors: {
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",

@@ -1,10 +1,8 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
 import "./globals.css";
 import SessionProvider from "../src/providers/SessionProvider";
 import { ThemeProvider } from "../src/providers/ThemeProvider";
-
-const inter = Inter({ subsets: ["latin"] });
+import { nanumSquareNeoVariable } from "../lib/fonts";
 
 export const metadata: Metadata = {
   title: "옥타그노시스",
@@ -21,7 +19,7 @@ export default function RootLayout({
       <head>
         <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
       </head>
-      <body className={inter.className}>
+      <body className={`${nanumSquareNeoVariable.variable} font-sans`}>
         <SessionProvider>
           <ThemeProvider defaultTheme="dark">
             {children}

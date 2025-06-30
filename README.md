@@ -19,6 +19,7 @@ ArtyLink는 성향 진단, 사고력 진단, 선호도 진단을 포함한 종�
 - **반응형 디자인**: 모바일, 태블릿, 데스크톱 모든 기기 지원
 - **직관적인 UI**: 단계별 진행 상황 표시 및 명확한 네비게이션
 - **다양한 입력 방식**: 텍스트, 이미지, 스케일 기반 선택지 지원
+- **한국어 최적화 폰트**: 나눔스퀘어 네오 폰트로 뛰어난 가독성 제공
 
 ## 기술 스택
 
@@ -27,6 +28,7 @@ ArtyLink는 성향 진단, 사고력 진단, 선호도 진단을 포함한 종�
 - **Database**: PostgreSQL (Supabase)
 - **Authentication**: NextAuth.js
 - **Internationalization**: Custom i18n utility functions
+- **Fonts**: 나눔스퀘어 네오 (NanumSquareNeo) - 한국어 최적화 웹폰트
 
 ## 다국어 테이블 구조
 
@@ -115,13 +117,19 @@ aptit-front/
 ├── app/                    # Next.js App Router
 │   ├── api/               # API 라우트
 │   ├── test/              # 검사 페이지
+│   ├── fonts/             # 나눔스퀘어 네오 폰트 파일
 │   └── components/        # 공통 컴포넌트
 ├── components/            # 재사용 가능한 컴포넌트
 ├── lib/                   # 유틸리티 함수
 │   ├── i18n.ts           # 다국어 지원 유틸리티
+│   ├── fonts.ts          # 폰트 설정
+│   ├── font-utils.ts     # 폰트 유틸리티 함수
 │   └── db/               # 데이터베이스 설정
+├── types/                 # TypeScript 타입 정의
+│   └── fonts.ts          # 폰트 관련 타입
 ├── prisma/               # 데이터베이스 스키마
-└── scripts/              # 마이그레이션 스크립트
+├── scripts/              # 마이그레이션 스크립트
+└── FONT_GUIDELINES.md    # 폰트 사용 가이드라인
 ```
 
 ## 환경 변수

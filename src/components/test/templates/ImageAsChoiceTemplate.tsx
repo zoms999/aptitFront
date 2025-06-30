@@ -1,9 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { TemplateProps, TimerState } from './types';
 import { 
-  CircularProgress, 
-  formatTime, 
-  getTimerProgress, 
   getCurrentStep, 
   getCompletedTimersFromStorage, 
   saveCompletedTimerToStorage,
@@ -123,24 +120,25 @@ export default function ImageAsChoiceTemplate({ testData, selectedAnswers, onSel
         {stableQuestions.map((question, questionIndex) => {
           const timerState = timerStates[question.qu_code];
           const hasTimeLimit = timerState !== undefined;
-          const timerIsActive = hasTimeLimit && timerState?.isActive;
           const timerIsCompleted = hasTimeLimit && timerState?.isCompleted;
           const showChoices = !hasTimeLimit || timerIsCompleted;
 
           return (
-            <div key={question.qu_code} className={`transition-opacity duration-300 ${questionIndex > 0 ? 'border-t border-gray-100 pt-10 mt-10' : ''}`}>
-              <div className="flex items-center mb-6">
-                <div className="relative group/number">
-                  <div className="absolute -inset-1 bg-gradient-to-r from-purple-500 to-pink-600 rounded-2xl blur opacity-60 group-hover/number:opacity-100 transition"></div>
-                  <div className="relative w-14 h-14 bg-gradient-to-br from-purple-500 to-pink-600 rounded-2xl flex items-center justify-center mr-6 flex-shrink-0 shadow-xl transition-all hover:scale-110 hover:rotate-3">
-                    <span className="text-white font-bold text-lg">{question.qu_order}</span>
-                  </div>
+            <div key={question.qu_code} className={`transition-opacity duration-300 ${questionIndex > 0 ? 'border-t border-slate-100 pt-10 mt-10' : ''}`}>
+              
+              {/* ✅ [수정] 문항 번호와 텍스트 스타일 및 간격 조정 */}
+              <div className="mb-6">
+                <div className="flex items-baseline gap-3">
+                  <span className="text-2xl font-bold text-purple-600 flex-shrink-0">
+                    {question.qu_order}.
+                  </span>
+                  <p className="text-xl text-slate-800 leading-relaxed font-semibold">
+                    {question.qu_text}
+                  </p>
                 </div>
-                <div className="flex-1"><p className="text-xl text-black leading-relaxed font-semibold">{question.qu_text}</p></div>
               </div>
-              <div className="ml-20">
-                
-                {/* ✅ [수정] 지시문(qu_passage) 렌더링 블록을 추가했습니다. */}
+
+              <div className="ml-8 md:ml-9">
                 {question.qu_passage && (
                   <div className="mb-6 p-5 bg-purple-50/60 rounded-xl border border-purple-200/50">
                     <div className="text-slate-800 text-base leading-relaxed space-y-2">
@@ -151,58 +149,105 @@ export default function ImageAsChoiceTemplate({ testData, selectedAnswers, onSel
                   </div>
                 )}
                 
+                {/* ✅ [수정] 문제 이미지(qu_images) 영역 가독성 향상 */}
                 {question.qu_images && question.qu_images.length > 0 && (
                   <div className="mt-8">
-                    <div className="bg-gray-50/80 p-6 rounded-2xl border border-gray-200/50 shadow-lg">
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {question.qu_images.map((img, i) => {
-                          const isNumberedQuestion = question.qu_code === 'thk02040';
-                          return (
-                            <div key={i} className="relative group">
-                              <img src={img} alt={`문제 이미지 ${i + 1}`} className="w-full h-auto object-cover rounded-xl shadow-md transform transition-transform group-hover:scale-105" />
-                              
-                              {isNumberedQuestion && (
-                                <div className="absolute top-2 left-2 z-10 w-6 h-6 bg-black/70 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-md">
-                                  {i + 1}
-                                </div>
-                              )}
+                    <div className="bg-slate-50 border border-slate-200/80 p-4 sm:p-6 rounded-2xl">
+                      {question.qu_code === 'thk05020' ? (
+                        <div className="space-y-6">
+                          {question.qu_images[0] && (
+                            <div className="flex justify-center">
+                              <div className="relative group max-w-2xl">
+                                <img src={question.qu_images[0]} alt="메인 문제 이미지" className="w-full h-auto object-cover rounded-xl shadow-lg transition-transform group-hover:scale-105" />
+                              </div>
                             </div>
-                          );
-                        })}
-                      </div>
+                          )}
+                          {question.qu_images.length > 1 && (
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 md:gap-6">
+                              {question.qu_images.slice(1).map((img, i) => (
+                                <div key={i + 1} className="relative group">
+                                  <img src={img} alt={`선택지 이미지 ${i + 1}`} className="w-full h-auto object-cover rounded-xl shadow-md transition-transform group-hover:scale-105" />
+                                  <div className="absolute top-2.5 left-2.5 z-10 w-7 h-7 bg-purple-600 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-lg border-2 border-white/80">
+                                    {i + 1}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+                          {question.qu_images.map((img, i) => {
+                            const isNumberedQuestion = question.qu_code === 'thk02040';
+                            return (
+                              <div key={i} className="relative group">
+                                <img src={img} alt={`문제 이미지 ${i + 1}`} className="w-full h-auto object-cover rounded-xl shadow-md transition-transform group-hover:scale-105" />
+                                {isNumberedQuestion && (
+                                  <div className="absolute top-2.5 left-2.5 z-10 w-7 h-7 bg-purple-600 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-lg border-2 border-white/80">
+                                    {i + 1}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
                 
-                {/* ... (타이머 관련 UI는 변경 없음) ... */}
-              
                 {showChoices ? (
-                  <div className="mt-8 flex justify-center">
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4 max-w-4xl">
-                      {question.choices.map((choice) => (
-                        <div key={choice.an_val} className="relative group/choice">
-                          <div className={`absolute -inset-0.5 rounded-xl blur opacity-0 group-hover/choice:opacity-60 transition ${ selectedAnswers[question.qu_code] === choice.an_val ? 'bg-gradient-to-r from-purple-500 to-pink-600 opacity-75' : 'bg-gradient-to-r from-purple-400 to-pink-500' }`}></div>
-                          <button onClick={() => onSelectChoice(question.qu_code, choice.an_val, choice.an_wei)} className={`relative w-full p-3 text-center rounded-xl font-semibold transition-all hover:scale-105 hover:-translate-y-0.5 ${ selectedAnswers[question.qu_code] === choice.an_val ? 'bg-gradient-to-r from-purple-500 to-pink-600 text-white shadow-lg scale-105 -translate-y-0.5' : 'bg-white/90 border-2 border-purple-200/60 text-gray-700 hover:bg-white hover:border-purple-300' }`}>
-                            {choice.choice_image_path ? (
-                              <div className="flex flex-col items-center space-y-2">
-                                <div className="rounded-lg overflow-hidden shadow-sm">
-                                  <img src={choice.choice_image_path} alt={`선택지 ${choice.an_val}`} className="w-full h-24 object-cover transition-transform group-hover/choice:scale-105" />
+                  /* ✅ [수정] 선택지(choices) 영역 가독성 향상 */
+                  <div className="mt-8">
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4 max-w-1xl mx-auto">
+                      {question.choices.map((choice) => {
+                        const isSelected = selectedAnswers[question.qu_code] === choice.an_val;
+                        return (
+                          <div key={choice.an_val} className="group/choice">
+                            <button 
+                              onClick={() => onSelectChoice(question.qu_code, choice.an_val, choice.an_wei)} 
+                              className={`relative w-full p-2 sm:p-3 text-center rounded-xl font-semibold transition-all duration-200 border-2
+                                ${isSelected
+                                  ? 'bg-purple-600 text-white border-purple-600 shadow-lg scale-105' 
+                                  : 'bg-white text-slate-700 border-slate-200 hover:border-purple-400 hover:shadow-md'
+                                }`}
+                            >
+                              {choice.choice_image_path ? (
+                                <div className="flex flex-col items-center space-y-3">
+                                  <div className="w-full rounded-lg overflow-hidden">
+                                    <img src={choice.choice_image_path} alt={`선택지 ${choice.an_val}`} className="w-full h-28 object-cover transition-transform group-hover/choice:scale-105" />
+                                  </div>
+                                  {choice.an_text && <span className="text-base font-semibold pt-1">{choice.an_text}</span>}
                                 </div>
-                                {choice.an_text && <span className="text-sm font-medium pt-2">{choice.an_text}</span>}
-                              </div>
-                            ) : (
-                              <div className="flex flex-row items-center justify-center h-24">
-                                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0 transition ${ selectedAnswers[question.qu_code] === choice.an_val ? 'bg-white text-purple-600' : 'bg-gradient-to-br from-purple-500 to-pink-600 text-white' }`}>{choice.an_val}</div>
-                                <span className="ml-3 text-base font-medium text-left">{choice.an_text}</span>
-                              </div>
-                            )}
-                          </button>
-                        </div>
-                      ))}
+                              ) : (
+                                <div className="flex flex-row items-center justify-center h-24">
+                                  <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0 transition-colors
+                                    ${isSelected
+                                      ? 'bg-white text-purple-600'
+                                      : 'bg-slate-100 text-slate-600 group-hover/choice:bg-purple-100 group-hover/choice:text-purple-600'
+                                    }`}
+                                  >
+                                    {choice.an_val}
+                                  </div>
+                                  <span className="ml-3 text-base font-medium text-left">{choice.an_text}</span>
+                                </div>
+                              )}
+                            </button>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 ) : (
-                  <div className="mt-8 p-8 bg-purple-50/50 rounded-2xl border border-purple-200/50 text-center"><div className="flex flex-col items-center space-y-4"><div className="w-16 h-16 rounded-full bg-purple-200 flex items-center justify-center"><svg className="w-8 h-8 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg></div><div className="text-purple-600 font-medium">이미지 선택지는 타이머 종료 후 나타납니다</div><div className="text-purple-500 text-sm">제시된 문제를 충분히 검토하세요</div></div></div>
+                  <div className="mt-8 p-8 bg-purple-50/50 rounded-2xl border border-purple-200/50 text-center">
+                    <div className="flex flex-col items-center space-y-4">
+                      <div className="w-16 h-16 rounded-full bg-purple-200 flex items-center justify-center">
+                        <svg className="w-8 h-8 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                      </div>
+                      <div className="text-purple-600 font-medium">이미지 선택지는 타이머 종료 후 나타납니다</div>
+                      <div className="text-purple-500 text-sm">제시된 문제를 충분히 검토하세요</div>
+                    </div>
+                  </div>
                 )}
               </div>
             </div>

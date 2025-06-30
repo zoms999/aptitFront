@@ -162,10 +162,29 @@ export default function PureTextQuestionTemplate({ testData, selectedAnswers, on
                       <svg className="w-5 h-5 text-blue-600 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
                       <span className="text-blue-800 font-bold text-sm">지문</span>
                     </div>
-                    <div 
-                      className="text-slate-700 text-base leading-relaxed"
-                      dangerouslySetInnerHTML={{ __html: question.qu_passage }}
-                    />
+                    <div className="text-slate-700 text-base leading-relaxed space-y-3">
+                      {question.qu_passage.split(/[①②③④⑤⑥⑦⑧⑨⑩]/).filter(item => item.trim() !== '').map((item, index) => {
+                        const trimmedItem = item.trim();
+                        if (trimmedItem === '') return null;
+                        
+                        // 원래 텍스트에서 해당 항목 앞의 번호를 찾기
+                        const numbers = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩'];
+                        const matchingNumber = numbers[index];
+                        
+                        return (
+                          <div key={index} className="flex items-start gap-3 p-3 bg-white/70 rounded-lg border border-blue-100">
+                            {matchingNumber && (
+                              <span className="text-blue-600 font-bold text-lg flex-shrink-0 mt-0.5">
+                                {matchingNumber}
+                              </span>
+                            )}
+                            <p className="text-slate-700 leading-relaxed font-medium">
+                              {trimmedItem}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
 

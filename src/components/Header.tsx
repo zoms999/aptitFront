@@ -18,7 +18,7 @@ export default function Header() {
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           <div className="flex items-center">
-            <Link href="/" className="text-white text-xl font-bold flex items-center">
+            <Link href="/" className="text-white text-xl font-bold flex items-center font-nanum-variable">
               <svg 
                 xmlns="http://www.w3.org/2000/svg" 
                 viewBox="0 0 24 24" 
@@ -35,10 +35,10 @@ export default function Header() {
           
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center space-x-10">
-            <a href="#" className="text-white hover:text-indigo-100 transition-colors">소개</a>
-            <a href="#" className="text-white hover:text-indigo-100 transition-colors">적성검사</a>
-            <a href="#" className="text-white hover:text-indigo-100 transition-colors">이용안내</a>
-            <a href="#" className="text-white hover:text-indigo-100 transition-colors">고객센터</a>
+            <a href="#" className="text-white hover:text-indigo-100 transition-colors font-medium">소개</a>
+            <a href="#" className="text-white hover:text-indigo-100 transition-colors font-medium">적성검사</a>
+            <a href="#" className="text-white hover:text-indigo-100 transition-colors font-medium">이용안내</a>
+            <a href="#" className="text-white hover:text-indigo-100 transition-colors font-medium">고객센터</a>
           </nav>
           
           <div className="hidden md:flex items-center space-x-4">

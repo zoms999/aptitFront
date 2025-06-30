@@ -71,12 +71,12 @@ export default function Home() {
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center">
             <div className="mb-8">
-              <h1 className="text-5xl md:text-7xl font-bold text-gray-900 mb-6 animate-fade-in">
+              <h1 className="text-5xl md:text-7xl font-bold text-gray-900 mb-6 animate-fade-in font-nanum-variable">
                 <span className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent drop-shadow-sm">
                   APTIT
                 </span>
               </h1>
-              <p className="text-xl md:text-2xl text-gray-700 mb-8 max-w-4xl mx-auto leading-relaxed animate-fade-in-delay-1 font-medium">
+              <p className="text-xl md:text-2xl text-gray-700 mb-8 max-w-4xl mx-auto leading-relaxed animate-fade-in-delay-1 font-medium font-nanum-variable">
                 AI 기반 종합 적성 검사 시스템으로<br />
                 <span className="text-indigo-600 font-semibold">당신의 성향, 사고력, 선호도</span>를 정확하게 분석하세요
               </p>
