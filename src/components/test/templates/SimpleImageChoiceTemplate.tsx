@@ -84,14 +84,16 @@ export default function SimpleImageChoiceTemplate({ testData, selectedAnswers, o
         isCompleted: true,
       },
     }));
+    const currentStep = getCurrentStep(stableQuestions);
+    saveCompletedTimerToStorage(questionCode, currentStep);
   };
 
   const getImageLayoutConfig = (imageCount: number) => {
-    if (imageCount === 1) return { gridCols: 'grid-cols-1', imageHeight: 'h-80 md:h-96', maxWidth: 'max-w-md mx-auto' };
-    if (imageCount === 2) return { gridCols: 'grid-cols-1 md:grid-cols-2', imageHeight: 'h-64 md:h-80', maxWidth: 'max-w-4xl mx-auto' };
-    if (imageCount <= 4) return { gridCols: 'grid-cols-2', imageHeight: 'h-48 md:h-56', maxWidth: 'max-w-4xl mx-auto' };
-    if (imageCount <= 6) return { gridCols: 'grid-cols-2 md:grid-cols-3', imageHeight: 'h-44 md:h-48', maxWidth: 'max-w-6xl mx-auto' };
-    return { gridCols: 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4', imageHeight: 'h-36 md:h-40', maxWidth: 'max-w-7xl mx-auto' };
+    if (imageCount === 1) return { gridCols: 'grid-cols-1', imageHeight: 'h-80 md:h-96', maxWidth: 'max-w-md' };
+    if (imageCount === 2) return { gridCols: 'grid-cols-1 md:grid-cols-2', imageHeight: 'h-64 md:h-80', maxWidth: 'max-w-4xl' };
+    if (imageCount <= 4) return { gridCols: 'grid-cols-2', imageHeight: 'h-48 md:h-56', maxWidth: 'max-w-4xl' };
+    if (imageCount <= 6) return { gridCols: 'grid-cols-2 md:grid-cols-3', imageHeight: 'h-44 md:h-48', maxWidth: 'max-w-6xl' };
+    return { gridCols: 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4', imageHeight: 'h-36 md:h-40', maxWidth: 'max-w-7xl' };
   };
 
   if (!isReady) {
@@ -111,13 +113,15 @@ export default function SimpleImageChoiceTemplate({ testData, selectedAnswers, o
         {stableQuestions.map((question, questionIndex) => {
           const timerState = timerStates[question.qu_code];
           const hasTimeLimit = timerState !== undefined;
-          const showChoices = !hasTimeLimit || timerState.isCompleted;
+          const showChoices = !hasTimeLimit || timerState?.isCompleted;
 
           const specialImageDisplayCodes = ['thk04150', 'thk04390'];
           let imagesToRender = question.qu_images || [];
-          if (specialImageDisplayCodes.includes(question.qu_code) && hasTimeLimit && !timerState.isCompleted) {
+          if (specialImageDisplayCodes.includes(question.qu_code) && hasTimeLimit && !timerState?.isCompleted) {
             imagesToRender = imagesToRender.slice(0, 1);
           }
+          
+          const shouldHideImages = question.qu_code === 'thk06100' && hasTimeLimit && timerState?.isCompleted;
           
           const imageCount = imagesToRender.length;
           let layoutConfig = getImageLayoutConfig(imageCount);
@@ -129,7 +133,6 @@ export default function SimpleImageChoiceTemplate({ testData, selectedAnswers, o
           return (
             <div key={question.qu_code} className={`transition-opacity duration-300 ${questionIndex > 0 ? 'border-t border-gray-200/80 pt-10 mt-10' : ''}`}>
               
-              {/* ✅ [수정] thk06070 문항에 대한 특별 헤더 분기 */}
               {question.qu_code === 'thk06070' ? (
                 <div className="flex items-center mb-8">
                   <div className="flex-shrink-0 mr-4">
@@ -142,7 +145,6 @@ export default function SimpleImageChoiceTemplate({ testData, selectedAnswers, o
                   </p>
                 </div>
               ) : (
-                // 다른 문항들의 기존 헤더
                 <div className="mb-6">
                   <div className="flex items-baseline gap-3 md:gap-4">
                     <span className="text-2xl font-bold text-green-600 flex-shrink-0">
@@ -155,7 +157,6 @@ export default function SimpleImageChoiceTemplate({ testData, selectedAnswers, o
                 </div>
               )}
 
-              {/* ✅ [수정] TimedImageSequenceTemplate의 타이머 UI (모든 타이머 문항에 공통 적용) */}
               {hasTimeLimit && !showChoices && (
                 <div className="mb-6">
                   <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-xl shadow-sm">
@@ -188,8 +189,9 @@ export default function SimpleImageChoiceTemplate({ testData, selectedAnswers, o
                 </div>
               )}
               
-              {/* ✅ [수정] thk06070 문항에 대한 특별 레이아웃 분기 */}
+              {/* ✅ [수정] 중첩 삼항 연산자로 문항별 레이아웃 분기 로직을 수정했습니다. */}
               {question.qu_code === 'thk06070' ? (
+                // thk06070 레이아웃
                 <div className="space-y-8">
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-8">
                     {(question.qu_passage?.split('|') || []).map((situation, index) => (
@@ -215,25 +217,60 @@ export default function SimpleImageChoiceTemplate({ testData, selectedAnswers, o
                     </div>
                   )}
                 </div>
-              ) : (
-                // 다른 모든 문항에 대한 기존 레이아웃
-                <>
-                  {imagesToRender.length > 0 && (
-                    <div className="mb-8">
-                      <div className={`${layoutConfig.maxWidth} mx-auto`}>
-                        <div className={`grid ${layoutConfig.gridCols} gap-4`}>
-                          {imagesToRender.map((img, i) => (
-                            <div key={i} className="relative group/image w-full p-2 bg-white rounded-xl shadow-md transform transition-transform hover:scale-105">
-                              <div className={`w-full ${layoutConfig.imageHeight} flex items-center justify-center bg-slate-50 rounded-lg overflow-hidden`}>
-                                <img src={img} alt={`문제 이미지 ${i + 1}`} className="max-w-full max-h-full object-contain" />
-                              </div>
-                            </div>
-                          ))}
+              ) : question.qu_code === 'thk06060' ? (
+                // thk06060 레이아웃: 제시문 왼쪽, 이미지 오른쪽
+                <div className="flex flex-col md:flex-row gap-8 items-start">
+                  {/* 왼쪽: 제시문 */}
+                  <div className="w-full md:w-1/2">
+                    {question.qu_passage && (
+                      <div className="p-6 bg-slate-50 rounded-lg border border-slate-200 h-full">
+                        <h4 className="text-lg font-bold text-slate-800 mb-4">제시문</h4>
+                        <div className="text-slate-700 text-base leading-relaxed space-y-2">
+                          {question.qu_passage.split('\n').map((line, index) => <p key={index}>{line}</p>)}
                         </div>
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
+                  {/* 오른쪽: 이미지 */}
+                  <div className="w-full md:w-1/2">
+                    {imagesToRender[0] && (
+                      <div className="p-2 bg-white rounded-xl shadow-md">
+                        <div className="w-full flex items-center justify-center bg-slate-50 rounded-lg overflow-hidden">
+                          <img src={imagesToRender[0]} alt="문제 이미지" className="max-w-full max-h-full object-contain" />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                 // 다른 모든 문항에 대한 기본 레이아웃
+                 <>
+                   {imagesToRender.length > 0 && (
+                     <div className="mb-8">
+                       <div className={`${layoutConfig.maxWidth} mx-auto`}>
+                         <div className={`grid ${layoutConfig.gridCols} gap-4`}>
+                           {imagesToRender.map((img, i) => (
+                             <div key={i} className="relative group/image w-full p-2 bg-white rounded-xl shadow-md transform transition-transform hover:scale-105">
+                               <div className={`w-full ${layoutConfig.imageHeight} flex items-center justify-center bg-slate-50 rounded-lg overflow-hidden`}>
+                                 {shouldHideImages ? (
+                                   <div className="flex flex-col items-center justify-center text-gray-400 space-y-2">
+                                     <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21" />
+                                     </svg>
+                                     <p className="text-sm font-medium">타이머 완료 - 이미지 숨김</p>
+                                   </div>
+                                 ) : (
+                                   <img src={img} alt={`문제 이미지 ${i + 1}`} className="max-w-full max-h-full object-contain" />
+                                 )}
+                               </div>
+                             </div>
+                           ))}
+                         </div>
+                       </div>
+                     </div>
+                   )}
 
+                  {/* thk06060가 아닐 때만 제시문이 이 위치에 렌더링되도록 함 */}
                   {question.qu_passage && (
                     <div className="mb-8 p-6 bg-slate-50 rounded-lg border border-slate-200">
                       <h4 className="text-lg font-bold text-slate-800 mb-4">제시문</h4>

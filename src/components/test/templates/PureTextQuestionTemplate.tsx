@@ -21,9 +21,10 @@ export default function PureTextQuestionTemplate({ testData, selectedAnswers, on
   // 타이머 상태 관리
   const [timerStates, setTimerStates] = useState<Record<string, TimerState>>({});
   const [isReady, setIsReady] = useState(false);
+  // ✅ [삭제] visibleLineCount 상태 변수를 제거했습니다.
+  // const [visibleLineCount, setVisibleLineCount] = useState(1);
 
-  // --- 타이머 관련 로직 (기존과 동일) ---
-  // 타이머 상태 초기화
+  // --- 타이머 관련 로직 ---
   useEffect(() => {
     if (!stableQuestions || stableQuestions.length === 0) {
       setIsReady(false);
@@ -51,7 +52,6 @@ export default function PureTextQuestionTemplate({ testData, selectedAnswers, on
     if (!isReady) setIsReady(true);
   }, [stableQuestions, isReady]);
 
-  // 타이머 실행
   useEffect(() => {
     if (!isReady) return;
     const intervalId = setInterval(() => {
@@ -77,6 +77,8 @@ export default function PureTextQuestionTemplate({ testData, selectedAnswers, on
     return () => clearInterval(intervalId);
   }, [isReady, stableQuestions]);
 
+  // ✅ [삭제] thk05010 지문 순차 공개 로직을 담고 있던 useEffect를 완전히 제거했습니다.
+
   // --- 개발 환경 관련 로직 (기존과 동일) ---
   useEffect(() => {
     if (process.env.NODE_ENV === 'development' && isReady) {
@@ -99,7 +101,6 @@ export default function PureTextQuestionTemplate({ testData, selectedAnswers, on
   const handleManualAutoSelect = () => { /* ... */ };
   const handleForceCompleteTimer = () => { /* ... */ };
   const handleClearCompletedTimers = () => { /* ... */ };
-
 
   if (!isReady) {
     return (
@@ -134,7 +135,6 @@ export default function PureTextQuestionTemplate({ testData, selectedAnswers, on
           return (
             <div key={question.qu_code} className={`transition-opacity duration-300 ${questionIndex > 0 ? 'border-t border-gray-100 pt-10 mt-10' : ''}`}>
               
-              {/* ✅ [수정] 문항 번호와 핵심 질문(qu_text)을 먼저 나란히 표시 */}
               <div className="flex items-baseline gap-4 md:gap-5 mb-8">
                 <span className="text-2xl md:text-3xl font-bold text-indigo-600 flex-shrink-0">
                   {question.qu_order}.
@@ -144,9 +144,7 @@ export default function PureTextQuestionTemplate({ testData, selectedAnswers, on
                 </p>
               </div>
 
-              {/* ✅ [수정] 보조적인 텍스트들(지문, 지시문 등)은 질문 아래에 배치 */}
               <div className="pl-8 md:pl-11 space-y-6">
-                {/* 문제 도입부/제목 */}
                 {question.qu_title && 
                   question.qu_title.trim() !== '' && 
                   question.qu_title.trim() !== question.qu_text.trim() && (
@@ -155,80 +153,73 @@ export default function PureTextQuestionTemplate({ testData, selectedAnswers, on
                   </div>
                 )}
 
-                {/* 핵심 지문 */}
                 {question.qu_passage && question.qu_passage.trim() !== '' && (
-                  <div className="px-5 py-4 bg-blue-50 rounded-lg border-l-4 border-blue-400">
-                    <div className="flex items-center mb-3">
-                      <svg className="w-5 h-5 text-blue-600 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
-                      <span className="text-blue-800 font-bold text-sm">지문</span>
+                  (hasTimeLimit && timerIsCompleted) ? (
+                    <div className="px-5 py-4 bg-gray-100 rounded-lg border-l-4 border-gray-400">
+                      <div className="flex items-center">
+                        <svg className="w-5 h-5 text-gray-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21" />
+                        </svg>
+                        <span className="text-gray-600 font-bold text-sm">지문 검토 시간 종료</span>
+                      </div>
                     </div>
-                    <div className="text-slate-700 text-base leading-relaxed space-y-3">
-                      {question.qu_passage.split(/[①②③④⑤⑥⑦⑧⑨⑩]/).filter(item => item.trim() !== '').map((item, index) => {
-                        const trimmedItem = item.trim();
-                        if (trimmedItem === '') return null;
-                        
-                        // 원래 텍스트에서 해당 항목 앞의 번호를 찾기
-                        const numbers = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩'];
-                        const matchingNumber = numbers[index];
-                        
-                        return (
-                          <div key={index} className="flex items-start gap-3 p-3 bg-white/70 rounded-lg border border-blue-100">
-                            {matchingNumber && (
-                              <span className="text-blue-600 font-bold text-lg flex-shrink-0 mt-0.5">
-                                {matchingNumber}
-                              </span>
-                            )}
-                            <p className="text-slate-700 leading-relaxed font-medium">
-                              {trimmedItem}
-                            </p>
-                          </div>
-                        );
-                      })}
+                  ) : (
+                    <div className="px-5 py-4 bg-blue-50 rounded-lg border-l-4 border-blue-400">
+                      <div className="flex items-center mb-3">
+                        <svg className="w-5 h-5 text-blue-600 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                        <span className="text-blue-800 font-bold text-sm">지문</span>
+                      </div>
+                      <div className="text-slate-700 text-base leading-relaxed space-y-2">
+                         {/* ✅ [수정] thk05010 조건부 렌더링을 제거하고 일반 로직으로 통합했습니다. */}
+                         {question.qu_passage.split('\n').map((line, index) => (
+                           <p key={index}>{line || '\u00A0'}</p>
+                         ))}
+                      </div>
                     </div>
-                  </div>
+                  )
                 )}
 
-                {/* 지시문 */}
                 {question.qu_instruction && (
                   <div className="px-5 py-4 bg-yellow-50 rounded-lg border-l-4 border-yellow-400">
                     <div className="flex items-center mb-3">
-                      <svg className="w-5 h-5 text-yellow-600 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"></path></svg>
+                      <svg className="w-5 h-5 text-yellow-600 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"></path></svg>
                       <span className="text-yellow-800 font-bold text-sm">지시문</span>
                     </div>
                     <p className="text-slate-700 text-base leading-relaxed">{question.qu_instruction}</p>
                   </div>
                 )}
-
-                {/* 타이머 UI */}
-                {timerIsActive && timerState && (
-                  <div className="mt-4 p-6 bg-gradient-to-r from-red-50 to-orange-50 rounded-2xl border border-red-200/50 shadow-lg">
-                    <div className="flex items-center justify-center space-x-6">
-                      <div className="relative"><CircularProgress progress={getTimerProgress(timerState)} /></div>
-                      <div className="text-center">
-                        <div className="text-3xl font-bold text-red-600 font-mono tracking-wider">{formatTime(timerState.timeLeft)}</div>
-                        <div className="text-sm text-red-500 font-medium mt-2">보기는 타이머 종료 후 나타납니다</div>
+                
+                {hasTimeLimit && (
+                  <div className={`mt-4 p-5 rounded-2xl border shadow-lg transition-all duration-300
+                    ${timerIsActive 
+                      ? 'bg-gradient-to-r from-red-50 to-orange-50 border-red-200/50' 
+                      : 'bg-gradient-to-r from-green-50 to-emerald-50 border-green-200/50'}`
+                  }>
+                    {timerIsActive ? (
+                      <div className="flex items-center justify-center space-x-6">
+                        <div className="relative"><CircularProgress progress={getTimerProgress(timerState)} /></div>
+                        <div className="text-center">
+                          <div className="text-3xl font-bold text-red-600 font-mono tracking-wider">{formatTime(timerState.timeLeft)}</div>
+                          <div className="text-sm text-red-500 font-medium mt-2">보기는 타이머 종료 후 나타납니다</div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                )}
-
-                {timerIsCompleted && (
-                  <div className="mt-4 p-5 bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl border border-green-200/50 shadow-lg">
-                    <div className="flex items-center justify-center space-x-3">
-                      <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center"><svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg></div>
-                      <div className="text-center">
-                        <div className="text-green-700 font-bold text-base">타이머 완료!</div>
-                        <div className="text-green-600 text-sm mt-1">이제 답안을 선택하세요</div>
+                    ) : (
+                      <div className="flex items-center justify-center space-x-3">
+                        <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
+                          <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-green-700 font-bold text-base">타이머 완료!</div>
+                          <div className="text-green-600 text-sm mt-1">이제 답안을 선택하세요</div>
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
                 )}
               </div>
 
-              {/* 선택지 */}
               <div className="mt-8 pl-8 md:pl-11">
                 {showChoices ? (
-                  // ✅ [수정] grid-cols-1로 변경하여 세로로 나열, max-w-3xl로 너비 제한
                   <div className="grid grid-cols-1 gap-3 max-w-3xl">
                     {question.choices.map((choice) => (
                       <div key={choice.an_val} className="relative group/choice">
@@ -248,13 +239,7 @@ export default function PureTextQuestionTemplate({ testData, selectedAnswers, on
                     ))}
                   </div>
                 ) : (
-                  <div className="p-8 bg-gray-50/50 rounded-2xl border border-gray-200/50 text-center max-w-3xl">
-                    <div className="flex flex-col items-center space-y-4">
-                      <div className="w-16 h-16 rounded-full bg-gray-200 flex items-center justify-center"><svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21" /></svg></div>
-                      <div className="text-gray-600 font-medium">보기는 타이머 종료 후 나타납니다</div>
-                      <div className="text-gray-500 text-sm">제시된 문제를 충분히 검토하세요</div>
-                    </div>
-                  </div>
+                  null
                 )}
               </div>
             </div>

@@ -175,6 +175,30 @@ export default function ImageAsChoiceTemplate({ testData, selectedAnswers, onSel
                             </div>
                           )}
                         </div>
+                      ) : question.qu_code === 'thk08040' ? (
+                        <div className="space-y-6">
+                          {/* 메인 문제 이미지 */}
+                          {question.qu_images[0] && (
+                            <div className="flex justify-center">
+                              <div className="relative group max-w-3xl">
+                                <img src={question.qu_images[0]} alt="메인 문제 이미지" className="w-full h-auto object-cover rounded-xl shadow-lg transition-transform group-hover:scale-105" />
+                              </div>
+                            </div>
+                          )}
+                          {/* 선택지 이미지들 (2x2 그리드) */}
+                          {question.qu_images.length > 1 && (
+                            <div className="grid grid-cols-2 gap-4 md:gap-6 max-w-2xl mx-auto">
+                              {question.qu_images.slice(1).map((img, i) => (
+                                <div key={i + 1} className="relative group">
+                                  <img src={img} alt={`선택지 이미지 ${i + 1}`} className="w-full h-auto object-cover rounded-xl shadow-md transition-transform group-hover:scale-105" />
+                                  <div className="absolute top-2.5 left-2.5 z-10 w-8 h-8 bg-white rounded-full flex items-center justify-center text-purple-600 font-bold text-base shadow-lg border-2 border-purple-600">
+                                    {i + 1}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
                           {question.qu_images.map((img, i) => {
@@ -220,7 +244,7 @@ export default function ImageAsChoiceTemplate({ testData, selectedAnswers, onSel
                                   {choice.an_text && <span className="text-base font-semibold pt-1">{choice.an_text}</span>}
                                 </div>
                               ) : (
-                                <div className="flex flex-row items-center justify-center h-24">
+                                <div className="flex flex-row items-center justify-center h-10">
                                   <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0 transition-colors
                                     ${isSelected
                                       ? 'bg-white text-purple-600'

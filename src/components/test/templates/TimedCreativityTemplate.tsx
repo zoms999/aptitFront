@@ -10,6 +10,8 @@ import {
   DevControls,
 } from './utils';
 
+const PRE_TIMER_DELAY_MS = 5000; // 5초
+
 export default function TimedCreativityTemplate({ testData, selectedAnswers, onSelectChoice }: TemplateProps) {
   const questions = testData.questions;
 
@@ -18,10 +20,10 @@ export default function TimedCreativityTemplate({ testData, selectedAnswers, onS
     return questions;
   }, [questions]);
 
-  // --- 타이머 상태 관리 및 로직 (변경 없음) ---
   const [timerStates, setTimerStates] = useState<Record<string, TimerState>>({});
   const [isReady, setIsReady] = useState(false);
 
+  // --- 1. 타이머 상태 초기화 Effect ---
   useEffect(() => {
     if (!stableQuestions || stableQuestions.length === 0) {
       setIsReady(false);
@@ -40,16 +42,46 @@ export default function TimedCreativityTemplate({ testData, selectedAnswers, onS
         if (isAlreadyCompleted) {
           newTimerStates[question.qu_code] = { timeLeft: 0, isActive: false, isCompleted: true, totalTime: timeLimitSec };
         } else {
-          newTimerStates[question.qu_code] = { timeLeft: timeLimitSec, isActive: true, isCompleted: false, totalTime: timeLimitSec };
+          newTimerStates[question.qu_code] = { timeLeft: timeLimitSec, isActive: false, isCompleted: false, totalTime: timeLimitSec };
         }
       }
     });
     setTimerStates(newTimerStates);
     if (!isReady) setIsReady(true);
-  }, [stableQuestions, isReady]);
+  }, [stableQuestions]); // isReady는 여기서 관리하지 않으므로 제거해도 무방합니다.
 
+
+  // --- 2. 타이머 시작 지연 Effect ---
   useEffect(() => {
     if (!isReady) return;
+
+    const pendingTimerCodes = Object.keys(timerStates).filter(
+      (code) => timerStates[code] && !timerStates[code].isActive && !timerStates[code].isCompleted
+    );
+
+    if (pendingTimerCodes.length === 0) return;
+
+    const delayTimeoutId = setTimeout(() => {
+      setTimerStates((prevStates) => {
+        const newStates = { ...prevStates };
+        pendingTimerCodes.forEach(code => {
+          if (newStates[code]) {
+            newStates[code].isActive = true;
+          }
+        });
+        return newStates;
+      });
+    }, PRE_TIMER_DELAY_MS);
+
+    return () => clearTimeout(delayTimeoutId);
+    // ✅ [수정] timerStates를 의존성 배열에 추가하여, timerStates가 변경될 때마다 이 Effect가 최신 상태를 가지고 실행되도록 합니다.
+  }, [isReady, timerStates]); 
+
+
+  // --- 3. 실제 카운트다운 Effect ---
+  useEffect(() => {
+    if (!isReady) return;
+
     const intervalId = setInterval(() => {
       setTimerStates((prevStates) => {
         const newStates = { ...prevStates };
@@ -70,14 +102,17 @@ export default function TimedCreativityTemplate({ testData, selectedAnswers, onS
         return hasChanges ? newStates : prevStates;
       });
     }, 1000);
+
     return () => clearInterval(intervalId);
-  }, [isReady, stableQuestions]);
+    // ✅ [수정] 이 Effect는 isReady만 의존해도 괜찮습니다. setInterval 콜백 안에서 prevStates를 사용하므로 항상 최신 상태를 참조합니다.
+  }, [isReady]);
 
-  // --- 개발 모드 함수들 (변경 없음) ---
-  const handleManualAutoSelect = () => { /* 로직 생략 */ };
-  const handleForceCompleteTimer = () => { /* 로직 생략 */ };
-  const handleClearCompletedTimers = () => { /* 로직 생략 */ };
-
+  
+  // 이하 렌더링 로직은 수정할 필요 없습니다. (기존 코드와 동일)
+  // ... (개발 모드 함수들 및 JSX)
+  const handleManualAutoSelect = () => { /* ... */ };
+  const handleForceCompleteTimer = () => { /* ... */ };
+  const handleClearCompletedTimers = () => { /* ... */ };
   const hasActiveTimers = Object.values(timerStates).some((state) => state?.isActive);
 
   if (!isReady) {
@@ -104,8 +139,7 @@ export default function TimedCreativityTemplate({ testData, selectedAnswers, onS
           const timerState = timerStates[question.qu_code];
           const isTimerActive = timerState?.isActive;
           const isTimerCompleted = timerState?.isCompleted;
-
-          // 'passageParts' 변수는 더 이상 필요 없으므로 삭제합니다.
+          const isDelayPhase = !isTimerActive && !isTimerCompleted && timerState?.totalTime > 0;
 
           return (
             <div key={question.qu_code}>
@@ -119,21 +153,17 @@ export default function TimedCreativityTemplate({ testData, selectedAnswers, onS
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-                
-                {/* ✅ [수정] 시 내용을 하나의 큰 박스에 표시 (2칼럼 차지) */}
                 <div className="lg:col-span-2">
                   <div className="p-6 bg-slate-50 rounded-xl border border-slate-200 shadow-sm h-full">
                     <div className="text-slate-700 text-base leading-relaxed space-y-2">
                       {question.qu_passage?.split('\n').map((line, lineIndex) => (
-                        <p key={lineIndex}>{line || '\u00A0'}</p> // 빈 줄 유지를 위해   처리
+                        <p key={lineIndex}>{line || '\u00A0'}</p>
                       ))}
                     </div>
                   </div>
                 </div>
 
-                {/* 2. 지시/정답 (1칼럼 차지) */}
                 <div className="space-y-4">
-                  {/* 지시문 (빨간색) */}
                   <div className="p-4 bg-red-100/60 border-l-4 border-red-500 rounded-r-lg">
                     <div className="text-red-800 font-medium text-sm leading-relaxed space-y-1">
                       {question.qu_instruction?.split('\n').map((line, lineIndex) => (
@@ -142,7 +172,6 @@ export default function TimedCreativityTemplate({ testData, selectedAnswers, onS
                     </div>
                   </div>
                   
-                  {/* 정답 (파란색 - 타이머 종료 후 표시) */}
                   {isTimerCompleted && question.qu_explain && (
                     <div className="p-4 bg-blue-100/60 border-l-4 border-blue-500 rounded-r-lg animate-fade-in">
                       <p className="text-blue-800 font-medium text-sm">
@@ -155,6 +184,18 @@ export default function TimedCreativityTemplate({ testData, selectedAnswers, onS
                   )}
                 </div>
               </div>
+
+              {isDelayPhase && (
+                <div className="text-center p-8 bg-gray-50/50 rounded-2xl border-2 border-dashed border-gray-200/80 animate-fade-in">
+                  <div className="flex flex-col items-center space-y-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <div className="text-gray-700 font-medium">잠시 후 타이머가 시작됩니다.</div>
+                    <div className="text-gray-500 text-sm">제시된 내용을 미리 살펴보세요.</div>
+                  </div>
+                </div>
+              )}
               
               {isTimerActive && (
                 <div className="text-center p-8 bg-pink-50/50 rounded-2xl border-2 border-dashed border-pink-200/80">
@@ -200,17 +241,3 @@ export default function TimedCreativityTemplate({ testData, selectedAnswers, onS
     </div>
   );
 }
-
-// 애니메이션을 위한 CSS (tailwind.config.js 또는 global.css에 추가)
-/* 
-@layer utilities {
-  .animate-fade-in {
-    animation: fadeIn 0.5s ease-in-out;
-  }
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-*/
