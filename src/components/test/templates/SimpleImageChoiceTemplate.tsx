@@ -7,6 +7,8 @@ import {
   saveCompletedTimerToStorage,
 } from './utils';
 
+const PRE_TIMER_DELAY_MS = 15000; // 15초
+
 export default function SimpleImageChoiceTemplate({ testData, selectedAnswers, onSelectChoice }: TemplateProps) {
   const questions = testData.questions;
 
@@ -39,57 +41,39 @@ export default function SimpleImageChoiceTemplate({ testData, selectedAnswers, o
         if (isAlreadyCompleted) {
           newTimerStates[question.qu_code] = { timeLeft: 0, isActive: false, isCompleted: true, totalTime: timeLimitSec };
         } else {
-          // ✅ 처음에는 비활성화 상태로 설정
           newTimerStates[question.qu_code] = { timeLeft: timeLimitSec, isActive: false, isCompleted: false, totalTime: timeLimitSec };
         }
       }
     });
     setTimerStates(newTimerStates);
     if (!isReady) setIsReady(true);
-    
-    console.log('[SimpleImageChoice] 타이머 상태 초기화:', newTimerStates);
-    
-    // ✅ stableQuestions가 변경될 때마다 대기 상태를 다시 활성화
-    setIsPreTimerActive(true);
-    console.log('[SimpleImageChoice] 대기 상태 활성화됨');
-  }, [stableQuestions, isReady]);
-
-  // ✅ stableQuestions가 변경될 때마다 15초 대기 후 타이머 활성화
+    setIsPreTimerActive(true); // 질문이 바뀔 때마다 대기 상태 재활성화
+  }, [stableQuestions]);
+  
+  // 15초 후 타이머를 활성화하는 Effect
   useEffect(() => {
-    // stableQuestions가 없으면 실행하지 않음
-    if (!stableQuestions || stableQuestions.length === 0) return;
-    
-    console.log('[SimpleImageChoice] 15초 대기 시작, stableQuestions:', stableQuestions.length);
+    if (!isReady || !stableQuestions.some(q => q.qu_time_limit_sec)) return;
     
     const preTimer = setTimeout(() => {
-      console.log('[SimpleImageChoice] 15초 완료, 타이머 활성화 시작');
       setIsPreTimerActive(false);
-      // 15초 후 모든 타이머를 활성화
-      setTimerStates(prev => {
-        const newStates = { ...prev };
-        Object.keys(newStates).forEach(questionCode => {
-          const state = newStates[questionCode];
-          if (state && !state.isCompleted) {
-            console.log(`[SimpleImageChoice] 타이머 활성화: ${questionCode}`);
-            newStates[questionCode] = {
-              ...state,
-              isActive: true
-            };
+      setTimerStates((prevStates) => {
+        const newStates = { ...prevStates };
+        Object.keys(newStates).forEach(code => {
+          if (newStates[code] && !newStates[code].isCompleted) {
+            newStates[code].isActive = true;
           }
         });
         return newStates;
       });
-    }, 15000); // 15초
+    }, PRE_TIMER_DELAY_MS);
 
-    return () => {
-      console.log('[SimpleImageChoice] 타이머 정리');
-      clearTimeout(preTimer);
-    };
-  }, [stableQuestions]); // ✅ stableQuestions 의존성 추가
+    return () => clearTimeout(preTimer);
+  }, [isReady, stableQuestions]);
 
   // 타이머 카운트다운 로직
   useEffect(() => {
     if (!isReady || isPreTimerActive) return;
+
     const intervalId = setInterval(() => {
       setTimerStates(prevStates => {
         const newStates = { ...prevStates };
@@ -111,7 +95,7 @@ export default function SimpleImageChoiceTemplate({ testData, selectedAnswers, o
       });
     }, 1000);
     return () => clearInterval(intervalId);
-  }, [isReady, stableQuestions, isPreTimerActive]); // ✅ isPreTimerActive 의존성 추가
+  }, [isReady, isPreTimerActive]);
 
   // 개발용 타이머 스킵 함수
   const handleSkipTimer = (questionCode: string) => {
@@ -125,6 +109,7 @@ export default function SimpleImageChoiceTemplate({ testData, selectedAnswers, o
         isCompleted: true,
       },
     }));
+    setIsPreTimerActive(false);
     const currentStep = getCurrentStep(stableQuestions);
     saveCompletedTimerToStorage(questionCode, currentStep);
   };
@@ -171,161 +156,155 @@ export default function SimpleImageChoiceTemplate({ testData, selectedAnswers, o
             layoutConfig = { ...layoutConfig, gridCols: 'grid-cols-3', maxWidth: 'max-w-6xl' };
           }
           
+          if (question.qu_code === 'thk06010') {
+            layoutConfig = { ...layoutConfig, gridCols: 'grid-cols-3', maxWidth: 'max-w-6xl' };
+          }
+          
+          const isSpecialLayout = question.qu_code === 'thk06060';
+          
+          const isPassageOverlayLayout = question.qu_code === 'thk06070';
+          const passageLines = isPassageOverlayLayout ? question.qu_passage?.split('|') || [] : [];
+
+
           return (
             <div key={question.qu_code} className={`transition-opacity duration-300 ${questionIndex > 0 ? 'border-t border-gray-200/80 pt-10 mt-10' : ''}`}>
               
-              {question.qu_code === 'thk06070' ? (
-                <div className="flex items-center mb-8">
-                  <div className="flex-shrink-0 mr-4">
-                    <span className="inline-flex items-center px-4 py-2 text-base font-bold text-white bg-green-600 rounded-md" style={{ clipPath: 'polygon(0 0, 100% 0, 90% 50%, 100% 100%, 0 100%)' }}>
-                      사고력{question.qu_order}
-                    </span>
-                  </div>
+              <div className="mb-6">
+                <div className="flex items-baseline gap-3 md:gap-4">
+                  <span className="text-2xl font-bold text-green-600 flex-shrink-0">
+                    {question.qu_order}.
+                  </span>
                   <p className="text-xl text-slate-800 leading-relaxed font-semibold">
                     {question.qu_title}
                   </p>
                 </div>
-              ) : (
-                <div className="mb-6">
-                  <div className="flex items-baseline gap-3 md:gap-4">
-                    <span className="text-2xl font-bold text-green-600 flex-shrink-0">
-                      {question.qu_order}.
-                    </span>
-                    <p className="text-xl text-slate-800 leading-relaxed font-semibold">
-                      {question.qu_title}
-                    </p>
-                  </div>
-                </div>
-              )}
+              </div>
 
               {hasTimeLimit && !showChoices && (
-                <div className="mb-6">
-                  <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-xl shadow-sm">
-                    {isPreTimerActive ? (
-                      <div className="flex items-center space-x-4">
-                        <div className="w-12 h-12 rounded-full flex items-center justify-center bg-sky-500 animate-pulse">
-                          <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                        </div>
-                        <div>
-                          <div className="text-lg font-bold text-sky-700">잠시 후 시작합니다</div>
-                          <div className="text-sm text-gray-600">문제 내용을 미리 확인하세요.</div>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-between space-x-4">
+                  <div className="mb-6">
+                    <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-xl shadow-sm">
+                      {isPreTimerActive ? (
                         <div className="flex items-center space-x-4">
-                          <div className={`w-12 h-12 rounded-full flex items-center justify-center ${timerState.isActive ? 'bg-green-500 animate-pulse' : 'bg-gray-500'}`}>
+                          <div className="w-12 h-12 rounded-full flex items-center justify-center bg-sky-500 animate-pulse">
                             <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                           </div>
                           <div>
-                            <div className={`text-2xl font-bold ${timerState.timeLeft <= 5 ? 'text-red-600' : 'text-gray-700'}`}>
-                              {formatTime(timerState.timeLeft)}
-                            </div>
-                            <div className="text-sm text-gray-600">
-                              {timerState.isActive ? '제한 시간' : '시간 종료 - 답을 선택하세요'}
-                            </div>
+                            <div className="text-lg font-bold text-sky-700">잠시 후 시작합니다</div>
+                            <div className="text-sm text-gray-600">문제 내용을 미리 확인하세요.</div>
                           </div>
                         </div>
-                        {process.env.NODE_ENV === 'development' && timerState.isActive && (
-                          <button onClick={() => handleSkipTimer(question.qu_code)} className="px-3 py-1 bg-sky-500 text-white text-xs font-bold rounded-full shadow hover:bg-sky-600 transition-all transform hover:scale-105" title="개발용: 타이머를 즉시 종료합니다.">
-                            스킵
-                          </button>
-                        )}
-                      </div>
-                    )}
-                    {!isPreTimerActive && (
-                      <div className="mt-4">
-                        <div className="w-full bg-gray-200 rounded-full h-2.5">
-                          <div className={`h-2.5 rounded-full transition-all duration-1000 ease-linear ${timerState.timeLeft <= 5 ? 'bg-red-500' : 'bg-green-500'}`} style={{ width: `${(timerState.timeLeft / timerState.totalTime) * 100}%` }}></div>
+                      ) : (
+                        <div className="flex items-center justify-between space-x-4">
+                          <div className="flex items-center space-x-4">
+                            <div className={`w-12 h-12 rounded-full flex items-center justify-center ${timerState.isActive ? 'bg-green-500 animate-pulse' : 'bg-gray-500'}`}>
+                              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                            </div>
+                            <div>
+                              <div className={`text-2xl font-bold ${timerState.timeLeft <= 5 ? 'text-red-600' : 'text-gray-700'}`}>
+                                {formatTime(timerState.timeLeft)}
+                              </div>
+                              <div className="text-sm text-gray-600">
+                                {timerState.isActive ? '제한 시간' : '시간 종료 - 답을 선택하세요'}
+                              </div>
+                            </div>
+                          </div>
+                          {process.env.NODE_ENV === 'development' && timerState.isActive && (
+                            <button onClick={() => handleSkipTimer(question.qu_code)} className="px-3 py-1 bg-sky-500 text-white text-xs font-bold rounded-full shadow hover:bg-sky-600 transition-all transform hover:scale-105" title="개발용: 타이머를 즉시 종료합니다.">
+                              스킵
+                            </button>
+                          )}
                         </div>
-                      </div>
-                    )}
+                      )}
+                      {!isPreTimerActive && timerState.totalTime > 0 && (
+                        <div className="mt-4">
+                          <div className="w-full bg-gray-200 rounded-full h-2.5">
+                            <div className={`h-2.5 rounded-full transition-all duration-1000 ease-linear ${timerState.timeLeft <= 5 ? 'bg-red-500' : 'bg-green-500'}`} style={{ width: `${(timerState.timeLeft / timerState.totalTime) * 100}%` }}></div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
               )}
               
-              {/* ✅ [수정] 중첩 삼항 연산자로 문항별 레이아웃 분기 로직을 수정했습니다. */}
-              {question.qu_code === 'thk06070' ? (
-                // thk06070 레이아웃
-                <div className="space-y-8">
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-8">
-                    {(question.qu_passage?.split('|') || []).map((situation, index) => (
-                      <div key={index} className="text-center space-y-3">
-                        <p className="font-semibold text-slate-800 text-base h-12 flex items-center justify-center">
-                          {situation.trim()}
-                        </p>
-                        {imagesToRender[index] && (
-                          <div className="p-2 bg-white rounded-xl shadow-md">
-                            <div className="bg-slate-50 rounded-lg overflow-hidden h-40 flex items-center justify-center">
-                              <img src={imagesToRender[index]} alt={situation.trim()} className="max-w-full max-h-full object-contain" />
+              {/* ✅ [수정] thk06070에 대한 특별 렌더링 블록: 텍스트를 이미지 위로 이동 */}
+              {isPassageOverlayLayout ? (
+                <div className="mb-8">
+                  <div className={`${layoutConfig.maxWidth} mx-auto`}>
+                    <div className={`grid grid-cols-1 md:grid-cols-3 gap-x-4 gap-y-6`}>
+                      {imagesToRender.map((img, i) => (
+                        <div key={i} className="flex flex-col gap-2">
+                           {/* 텍스트 (이미지 위) */}
+                           <div className="p-3 bg-slate-100 rounded-lg text-center h-full flex items-center justify-center">
+                              <p className="text-slate-800 font-semibold text-base leading-snug">
+                                {passageLines[i] || ''}
+                              </p>
+                            </div>
+                           {/* 이미지 컨테이너 */}
+                           <div className="relative group/image w-full p-2 bg-white rounded-xl shadow-md transform transition-transform hover:scale-105">
+                            <div className={`w-full ${layoutConfig.imageHeight} flex items-center justify-center bg-slate-50 rounded-lg overflow-hidden`}>
+                              <img src={img} alt={`상황 이미지 ${i + 1}`} className="max-w-full max-h-full object-contain" />
                             </div>
                           </div>
-                        )}
-                      </div>
-                    ))}
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  {question.qu_instruction && (
-                    <div className="text-center p-4 bg-blue-50/70 rounded-lg">
-                      <p className="font-semibold text-blue-800"
-                        dangerouslySetInnerHTML={{ __html: question.qu_instruction.replace(/(\d+초)/g, '<span class="text-blue-600 font-bold">$1</span>')}}
-                      />
+                </div>
+              ) : isSpecialLayout ? (
+                // thk06060에 대한 레이아웃
+                <div className="mb-8 grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+                  {question.qu_passage && (
+                    <div className="p-6 bg-slate-50 rounded-lg border border-slate-200 h-full">
+                      <h4 className="text-lg font-bold text-slate-800 mb-4">제시문</h4>
+                      <div className="text-slate-700 text-base leading-relaxed space-y-2">
+                        {question.qu_passage.split('\n').map((line, index) => <p key={index}>{line}</p>)}
+                      </div>
+                    </div>
+                  )}
+                  {imagesToRender.length > 0 && (
+                    <div>
+                      <div className={`${layoutConfig.maxWidth} mx-auto`}>
+                        <div className={`grid ${layoutConfig.gridCols} gap-4`}>
+                          {imagesToRender.map((img, i) => (
+                            <div key={i} className="relative group/image w-full p-2 bg-white rounded-xl shadow-md transform transition-transform hover:scale-105">
+                              <div className={`w-full ${layoutConfig.imageHeight} flex items-center justify-center bg-slate-50 rounded-lg overflow-hidden`}>
+                                <img src={img} alt={`문제 이미지 ${i + 1}`} className="max-w-full max-h-full object-contain" />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
-              ) : question.qu_code === 'thk06060' ? (
-                // thk06060 레이아웃: 제시문 왼쪽, 이미지 오른쪽
-                <div className="flex flex-col md:flex-row gap-8 items-start">
-                  {/* 왼쪽: 제시문 */}
-                  <div className="w-full md:w-1/2">
-                    {question.qu_passage && (
-                      <div className="p-6 bg-slate-50 rounded-lg border border-slate-200 h-full">
-                        <h4 className="text-lg font-bold text-slate-800 mb-4">제시문</h4>
-                        <div className="text-slate-700 text-base leading-relaxed space-y-2">
-                          {question.qu_passage.split('\n').map((line, index) => <p key={index}>{line}</p>)}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  {/* 오른쪽: 이미지 */}
-                  <div className="w-full md:w-1/2">
-                    {imagesToRender[0] && (
-                      <div className="p-2 bg-white rounded-xl shadow-md">
-                        <div className="w-full flex items-center justify-center bg-slate-50 rounded-lg overflow-hidden">
-                          <img src={imagesToRender[0]} alt="문제 이미지" className="max-w-full max-h-full object-contain" />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
               ) : (
-                 // 다른 모든 문항에 대한 기본 레이아웃
-                 <>
-                   {imagesToRender.length > 0 && (
-                     <div className="mb-8">
-                       <div className={`${layoutConfig.maxWidth} mx-auto`}>
-                         <div className={`grid ${layoutConfig.gridCols} gap-4`}>
-                           {imagesToRender.map((img, i) => (
-                             <div key={i} className="relative group/image w-full p-2 bg-white rounded-xl shadow-md transform transition-transform hover:scale-105">
-                               <div className={`w-full ${layoutConfig.imageHeight} flex items-center justify-center bg-slate-50 rounded-lg overflow-hidden`}>
-                                 {shouldHideImages ? (
-                                   <div className="flex flex-col items-center justify-center text-gray-400 space-y-2">
-                                     <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21" />
-                                     </svg>
-                                     <p className="text-sm font-medium">타이머 완료 - 이미지 숨김</p>
-                                   </div>
-                                 ) : (
-                                   <img src={img} alt={`문제 이미지 ${i + 1}`} className="max-w-full max-h-full object-contain" />
-                                 )}
-                               </div>
-                             </div>
-                           ))}
-                         </div>
-                       </div>
-                     </div>
-                   )}
+                // 그 외 모든 문항에 대한 기본 레이아웃
+                <>
+                  {imagesToRender.length > 0 && (
+                    <div className="mb-8">
+                      <div className={`${layoutConfig.maxWidth} mx-auto`}>
+                        <div className={`grid ${layoutConfig.gridCols} gap-4`}>
+                          {imagesToRender.map((img, i) => (
+                            <div key={i} className="relative group/image w-full p-2 bg-white rounded-xl shadow-md transform transition-transform hover:scale-105">
+                              <div className={`w-full ${layoutConfig.imageHeight} flex items-center justify-center bg-slate-50 rounded-lg overflow-hidden`}>
+                                {shouldHideImages ? (
+                                  <div className="flex flex-col items-center justify-center text-gray-400 space-y-2">
+                                    <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21" />
+                                    </svg>
+                                    <p className="text-sm font-medium">타이머 완료 - 이미지 숨김</p>
+                                  </div>
+                                ) : (
+                                  <img src={img} alt={`문제 이미지 ${i + 1}`} className="max-w-full max-h-full object-contain" />
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
-                  {/* thk06060가 아닐 때만 제시문이 이 위치에 렌더링되도록 함 */}
                   {question.qu_passage && (
                     <div className="mb-8 p-6 bg-slate-50 rounded-lg border border-slate-200">
                       <h4 className="text-lg font-bold text-slate-800 mb-4">제시문</h4>
@@ -337,9 +316,8 @@ export default function SimpleImageChoiceTemplate({ testData, selectedAnswers, o
                 </>
               )}
               
-              {/* 선택지는 모든 문항에 공통으로 표시 */}
               {showChoices && (
-                <div className="mt-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-w-5xl mx-auto">
+                <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4 max-w-4xl mx-auto">
                   {question.choices.map((choice) => (
                     <button 
                       key={choice.an_val}

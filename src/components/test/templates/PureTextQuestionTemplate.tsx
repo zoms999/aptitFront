@@ -1,9 +1,9 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { TemplateProps, TimerState } from './types';
 import { 
-  CircularProgress, 
+  CircularProgress, // 이 컴포넌트는 더 이상 사용되지 않지만, 다른 곳에서 필요할 수 있으므로 import는 유지합니다.
   formatTime, 
-  getTimerProgress, 
+  getTimerProgress, // 이 함수는 더 이상 사용되지 않지만, import는 유지합니다.
   getCurrentStep, 
   getCompletedTimersFromStorage, 
   saveCompletedTimerToStorage,
@@ -20,11 +20,12 @@ export default function PureTextQuestionTemplate({ testData, selectedAnswers, on
     return questions;
   }, [questions]);
 
-  // 타이머 상태 관리
+  // 타이머 상태 관리 (SimpleImageChoiceTemplate과 동일)
   const [timerStates, setTimerStates] = useState<Record<string, TimerState>>({});
   const [isReady, setIsReady] = useState(false);
+  const [isPreTimerActive, setIsPreTimerActive] = useState(true);
 
-  // --- 타이머 관련 로직 (15초 지연 포함) ---
+  // 타이머 초기화 로직
   useEffect(() => {
     if (!stableQuestions || stableQuestions.length === 0) {
       setIsReady(false);
@@ -42,7 +43,7 @@ export default function PureTextQuestionTemplate({ testData, selectedAnswers, on
         const isAlreadyCompleted = completedTimers[question.qu_code] === true;
         newTimerStates[question.qu_code] = {
           timeLeft: isAlreadyCompleted ? 0 : timeLimitSec,
-          isActive: false, 
+          isActive: false,
           isCompleted: isAlreadyCompleted,
           totalTime: timeLimitSec,
         };
@@ -50,20 +51,19 @@ export default function PureTextQuestionTemplate({ testData, selectedAnswers, on
     });
     setTimerStates(newTimerStates);
     if (!isReady) setIsReady(true);
-  }, [stableQuestions, isReady]);
+    setIsPreTimerActive(true);
+  }, [stableQuestions]);
   
+  // 15초 후 타이머를 활성화하는 Effect
   useEffect(() => {
-    if (!isReady) return;
-    const pendingTimerCodes = Object.keys(timerStates).filter(
-      (code) => timerStates[code] && !timerStates[code].isActive && !timerStates[code].isCompleted
-    );
-    if (pendingTimerCodes.length === 0) return;
-
-    const delayTimeoutId = setTimeout(() => {
+    if (!isReady || !stableQuestions.some(q => q.qu_time_limit_sec)) return;
+    
+    const preTimer = setTimeout(() => {
+      setIsPreTimerActive(false);
       setTimerStates((prevStates) => {
         const newStates = { ...prevStates };
-        pendingTimerCodes.forEach(code => {
-          if (newStates[code]) {
+        Object.keys(newStates).forEach(code => {
+          if (newStates[code] && !newStates[code].isCompleted) {
             newStates[code].isActive = true;
           }
         });
@@ -71,11 +71,13 @@ export default function PureTextQuestionTemplate({ testData, selectedAnswers, on
       });
     }, PRE_TIMER_DELAY_MS);
 
-    return () => clearTimeout(delayTimeoutId);
-  }, [isReady, timerStates]);
+    return () => clearTimeout(preTimer);
+  }, [isReady, stableQuestions]);
 
+  // 타이머 카운트다운 로직
   useEffect(() => {
-    if (!isReady) return;
+    if (!isReady || isPreTimerActive) return;
+
     const intervalId = setInterval(() => {
       setTimerStates(prevStates => {
         const newStates = { ...prevStates };
@@ -97,27 +99,26 @@ export default function PureTextQuestionTemplate({ testData, selectedAnswers, on
       });
     }, 1000);
     return () => clearInterval(intervalId);
-  }, [isReady, stableQuestions]);
-
-  // --- 개발 환경 관련 로직 (기존과 동일) ---
-  useEffect(() => {
-    if (process.env.NODE_ENV === 'development' && isReady) {
-      const timer = setTimeout(() => {
-        stableQuestions.forEach((question) => {
-          if (selectedAnswers[question.qu_code]) return;
-          const timerState = timerStates[question.qu_code];
-          if (timerState && !timerState.isCompleted) return;
-          const availableChoices = question.choices.filter(c => c.an_val >= 1 && c.an_val <= 5);
-          if (availableChoices.length > 0) {
-            const randomChoice = availableChoices[Math.floor(Math.random() * availableChoices.length)];
-            onSelectChoice(question.qu_code, randomChoice.an_val, randomChoice.an_wei);
-          }
-        });
-      }, 1500);
-      return () => clearTimeout(timer);
-    }
-  }, [stableQuestions, selectedAnswers, onSelectChoice, timerStates, isReady]);
+  }, [isReady, isPreTimerActive]);
   
+  // 개발용 타이머 스킵 함수
+  const handleSkipTimer = (questionCode: string) => {
+    if (process.env.NODE_ENV !== 'development') return;
+    setTimerStates(prev => ({
+      ...prev,
+      [questionCode]: {
+        ...prev[questionCode],
+        timeLeft: 0,
+        isActive: false,
+        isCompleted: true,
+      },
+    }));
+    setIsPreTimerActive(false);
+    const currentStep = getCurrentStep(stableQuestions);
+    saveCompletedTimerToStorage(questionCode, currentStep);
+  };
+  
+  // --- 개발 환경 관련 로직 (기존과 동일) ---
   const handleManualAutoSelect = () => { /* ... */ };
   const handleForceCompleteTimer = () => { /* ... */ };
   const handleClearCompletedTimers = () => { /* ... */ };
@@ -131,7 +132,7 @@ export default function PureTextQuestionTemplate({ testData, selectedAnswers, on
     );
   }
 
-  const hasActiveTimers = Object.values(timerStates).some(state => state.isActive);
+  const hasActiveTimers = Object.values(timerStates).some(state => state?.isActive);
 
   return (
     <div className="relative group">
@@ -148,13 +149,10 @@ export default function PureTextQuestionTemplate({ testData, selectedAnswers, on
         {stableQuestions.map((question, questionIndex) => {
           const timerState = timerStates[question.qu_code];
           const hasTimeLimit = timerState !== undefined;
-          const isTimerActive = hasTimeLimit && timerState?.isActive;
-          const isTimerCompleted = hasTimeLimit && timerState?.isCompleted;
-          const isDelayPhase = hasTimeLimit && !isTimerActive && !isTimerCompleted;
-          const showChoices = !hasTimeLimit || isTimerCompleted;
+          const showChoices = !hasTimeLimit || timerState?.isCompleted;
 
           return (
-            <div key={question.qu_code} className={`transition-opacity duration-300 ${questionIndex > 0 ? 'border-t border-gray-100 pt-10 mt-10' : ''}`}>
+            <div key={question.qu_code} className={`transition-opacity duration-300 ${questionIndex > 0 ? 'border-t border-gray-200/80 pt-10 mt-10' : ''}`}>
               
               <div className="flex items-baseline gap-4 md:gap-5 mb-8">
                 <span className="text-2xl md:text-3xl font-bold text-indigo-600 flex-shrink-0">
@@ -164,6 +162,57 @@ export default function PureTextQuestionTemplate({ testData, selectedAnswers, on
                   {question.qu_text}
                 </p>
               </div>
+
+              {/* ✅ [수정] 타이머 UI를 SimpleImageChoiceTemplate과 동일하게 변경 */}
+              {hasTimeLimit && !showChoices && (
+                  <div className="mb-8 pl-8 md:pl-11">
+                    <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-xl shadow-sm">
+                      {isPreTimerActive ? (
+                        <div className="flex items-center space-x-4">
+                          <div className="w-12 h-12 rounded-full flex items-center justify-center bg-sky-500 animate-pulse">
+                            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                          </div>
+                          <div>
+                            <div className="text-lg font-bold text-sky-700">잠시 후 시작합니다</div>
+                            <div className="text-sm text-gray-600">문제 내용을 미리 확인하세요.</div>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="flex items-center justify-between space-x-4">
+                            <div className="flex items-center space-x-4">
+                              {/* PureText는 테마 컬러가 indigo/purple이므로, 아이콘 컬러도 맞춰주는 것이 좋습니다. 여기서는 green 대신 indigo를 사용합니다. */}
+                              <div className={`w-12 h-12 rounded-full flex items-center justify-center ${timerState.isActive ? 'bg-indigo-500 animate-pulse' : 'bg-gray-500'}`}>
+                                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                              </div>
+                              <div>
+                                <div className={`text-2xl font-bold ${timerState.timeLeft <= 5 ? 'text-red-600' : 'text-gray-700'}`}>
+                                  {formatTime(timerState.timeLeft)}
+                                </div>
+                                <div className="text-sm text-gray-600">
+                                  {timerState.isActive ? '제한 시간' : '시간 종료 - 답을 선택하세요'}
+                                </div>
+                              </div>
+                            </div>
+                            {process.env.NODE_ENV === 'development' && timerState.isActive && (
+                              <button onClick={() => handleSkipTimer(question.qu_code)} className="px-3 py-1 bg-sky-500 text-white text-xs font-bold rounded-full shadow hover:bg-sky-600 transition-all transform hover:scale-105" title="개발용: 타이머를 즉시 종료합니다.">
+                                스킵
+                              </button>
+                            )}
+                          </div>
+                          {timerState.totalTime > 0 && (
+                            <div className="mt-4">
+                              <div className="w-full bg-gray-200 rounded-full h-2.5">
+                                {/* 여기도 indigo/purple 테마에 맞게 색상 변경 */}
+                                <div className={`h-2.5 rounded-full transition-all duration-1000 ease-linear ${timerState.timeLeft <= 5 ? 'bg-red-500' : 'bg-indigo-500'}`} style={{ width: `${(timerState.timeLeft / timerState.totalTime) * 100}%` }}></div>
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+              )}
 
               <div className="pl-8 md:pl-11 space-y-6">
                 {question.qu_title && 
@@ -175,7 +224,7 @@ export default function PureTextQuestionTemplate({ testData, selectedAnswers, on
                 )}
 
                 {question.qu_passage && question.qu_passage.trim() !== '' && (
-                  (hasTimeLimit && isTimerCompleted) ? (
+                  (hasTimeLimit && timerState?.isCompleted) ? (
                     <div className="px-5 py-4 bg-gray-100 rounded-lg border-l-4 border-gray-400">
                       <div className="flex items-center">
                         <svg className="w-5 h-5 text-gray-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -208,46 +257,6 @@ export default function PureTextQuestionTemplate({ testData, selectedAnswers, on
                     <p className="text-slate-700 text-base leading-relaxed">{question.qu_instruction}</p>
                   </div>
                 )}
-                
-                {isDelayPhase ? (
-                  <div className={`mt-4 p-5 rounded-2xl border shadow-lg transition-all duration-300 bg-gradient-to-r from-gray-50 to-gray-100 border-gray-200/50`}>
-                     <div className="flex items-center justify-center space-x-4">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        <div className="text-center">
-                          <div className="text-gray-700 font-medium">잠시 후 타이머가 시작됩니다.</div>
-                          <div className="text-gray-500 text-sm mt-1">지문을 미리 읽어보세요.</div>
-                        </div>
-                      </div>
-                  </div>
-                ) : hasTimeLimit && (
-                  <div className={`mt-4 p-5 rounded-2xl border shadow-lg transition-all duration-300
-                    ${isTimerActive
-                      ? 'bg-gradient-to-r from-red-50 to-orange-50 border-red-200/50' 
-                      : 'bg-gradient-to-r from-green-50 to-emerald-50 border-green-200/50'}`
-                  }>
-                    {isTimerActive ? (
-                      <div className="flex items-center justify-center space-x-6">
-                        <div className="relative"><CircularProgress progress={getTimerProgress(timerState)} /></div>
-                        <div className="text-center">
-                          <div className="text-3xl font-bold text-red-600 font-mono tracking-wider">{formatTime(timerState.timeLeft)}</div>
-                          <div className="text-sm text-red-500 font-medium mt-2">보기는 타이머 종료 후 나타납니다</div>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-center space-x-3">
-                        <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
-                          <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-                        </div>
-                        <div className="text-center">
-                          <div className="text-green-700 font-bold text-base">타이머 완료!</div>
-                          <div className="text-green-600 text-sm mt-1">이제 답안을 선택하세요</div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
               </div>
 
               <div className="mt-8 pl-8 md:pl-11">
@@ -258,15 +267,12 @@ export default function PureTextQuestionTemplate({ testData, selectedAnswers, on
                         <div className={`absolute -inset-0.5 rounded-xl blur opacity-0 group-hover/choice:opacity-60 transition ${selectedAnswers[question.qu_code] === choice.an_val ? 'bg-gradient-to-r from-indigo-500 to-purple-600 opacity-75' : 'bg-gradient-to-r from-indigo-400 to-purple-500'}`}></div>
                         <button 
                           onClick={() => onSelectChoice(question.qu_code, choice.an_val, choice.an_wei)} 
-                          // ✅ [수정] 버튼 패딩 조정
                           className={`relative w-full h-full px-4 py-4 text-left rounded-xl font-semibold transition-all hover:scale-105 hover:-translate-y-1 ${selectedAnswers[question.qu_code] === choice.an_val ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-xl scale-105 -translate-y-1' : 'bg-white/90 border border-gray-200/60 text-gray-700 hover:bg-white'}`}
                         >
                           <div className="flex flex-row items-center">
-                            {/* ✅ [수정] 아이콘-텍스트 간격 조정 */}
                             <div className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs flex-shrink-0 transition mr-4 ${selectedAnswers[question.qu_code] === choice.an_val ? 'bg-white text-indigo-600' : 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white'}`}>
                               {choice.an_val}
                             </div>
-                            {/* ✅ [수정] 보기 폰트 크기 변경 (sm -> base) */}
                             <span className="text-base font-medium">{choice.an_text}</span>
                           </div>
                         </button>
