@@ -127,7 +127,97 @@ export async function POST(
       
       // 성향 진단(tnd) 완료 후 사고력 진단(thk)으로 전환
       if (step === 'tnd') {
-        console.log('성향 진단 완료. 사고력 진단으로 전환 시도...');
+        console.log('🎯 [성향진단 완료] 사고력 진단으로 전환 시도...');
+        
+        // 💾 성향 진단 점수 계산 및 저장 먼저 실행
+        try {
+          console.log('📊 [성향진단 점수] 점수 계산 시작 - anp_seq:', anp_seq);
+          
+          // 1. 기존 점수 데이터 삭제
+          await prisma.$queryRaw`
+            DELETE FROM mwd_score1 
+            WHERE anp_seq = ${anp_seq}::integer 
+            AND sc1_step = 'tnd'
+          `;
+          console.log('✅ [성향진단 점수] 기존 점수 데이터 삭제 완료');
+          
+          // 2. 점수 계산을 위한 데이터 존재 여부 확인
+          const answerCountResult = await prisma.$queryRaw`
+            SELECT COUNT(*) as answer_count
+            FROM mwd_answer an
+            JOIN mwd_question qu ON qu.qu_code = an.qu_code 
+            WHERE an.anp_seq = ${anp_seq}::integer 
+              AND qu.qu_qusyn = 'Y' 
+              AND qu.qu_use = 'Y' 
+              AND qu.qu_kind1 = 'tnd' 
+              AND an.an_ex > 0 
+              AND an.an_progress > 0
+          `;
+          
+          const answerCount = Array.isArray(answerCountResult) && answerCountResult.length > 0 
+            ? Number(answerCountResult[0].answer_count) 
+            : 0;
+            
+          console.log(`📊 [성향진단 점수] 성향진단 답변 개수: ${answerCount}개`);
+          
+                     if (answerCount > 0) {
+             // 3. 새로운 점수 데이터 계산 및 삽입
+             await prisma.$queryRaw`
+               INSERT INTO mwd_score1 
+               (anp_seq, sc1_step, qua_code, sc1_score, sc1_rate, sc1_rank, sc1_qcnt) 
+               SELECT 
+                 ${anp_seq}::integer AS anpseq, 
+                 'tnd' AS tnd, 
+                 qua_code, 
+                 score, 
+                 rate, 
+                 row_number() OVER (ORDER BY rate DESC, fcnt DESC, ocnt), 
+                 cnt 
+               FROM (
+                 SELECT 
+                   qa.qua_code, 
+                   sum(an.an_wei) AS score, 
+                   round(cast(sum(an.an_wei) AS numeric)/cast(qa.qua_totalscore AS numeric),3) AS rate, 
+                   count(*) AS cnt, 
+                   cast(sum(CASE WHEN an.an_wei = 5 THEN 1 ELSE 0 END) AS numeric) AS fcnt, 
+                   cast(sum(CASE WHEN an.an_wei = 1 THEN 1 ELSE 0 END) AS numeric) AS ocnt 
+                 FROM 
+                   mwd_answer an, 
+                   mwd_question qu, 
+                   mwd_question_attr qa 
+                 WHERE 
+                   an.anp_seq = ${anp_seq}::integer 
+                   AND qu.qu_code = an.qu_code 
+                   AND qu.qu_qusyn = 'Y' 
+                   AND qu.qu_use = 'Y' 
+                   AND qu.qu_kind1 = 'tnd' 
+                   AND qa.qua_code = qu.qu_kind2 
+                   AND an.an_ex > 0 
+                   AND an.an_progress > 0 
+                 GROUP BY 
+                   qa.qua_code, qa.qua_totalscore
+               ) AS t1
+             `;
+             
+             console.log('✅ [성향진단 점수] 점수 계산 및 저장 완료');
+            
+            // 저장된 점수 확인
+            const savedScoresResult = await prisma.$queryRaw`
+              SELECT qua_code, sc1_score, sc1_rate, sc1_rank, sc1_qcnt
+              FROM mwd_score1 
+              WHERE anp_seq = ${anp_seq}::integer AND sc1_step = 'tnd'
+              ORDER BY sc1_rank
+            `;
+            
+            console.log('📊 [성향진단 점수] 저장된 점수 목록:', savedScoresResult);
+          } else {
+            console.log('⚠️ [성향진단 점수] 점수 계산할 답변이 없음');
+          }
+          
+        } catch (scoreError) {
+          console.error('❌ [성향진단 점수] 점수 계산 중 오류:', scoreError);
+          // 점수 계산 실패해도 다음 단계로 진행
+        }
         
         // 사고력 진단의 첫 번째 문항 조회
         const thinkingQuestionResult = await prisma.$queryRaw`
@@ -156,7 +246,7 @@ export async function POST(
         
         if (Array.isArray(thinkingQuestionResult) && thinkingQuestionResult.length > 0) {
           nextQuestion = thinkingQuestionResult[0];
-          console.log('사고력 진단 첫 문항 찾음:', nextQuestion);
+          console.log('🎯 [성향진단 완료] 사고력 진단 첫 문항 찾음:', nextQuestion);
           
           // answer_progress의 단계를 사고력 진단으로 업데이트
           await prisma.$queryRaw`
@@ -166,14 +256,14 @@ export async function POST(
             WHERE anp_seq = ${anp_seq}::integer
           `;
           
-          console.log('answer_progress 테이블 업데이트 완료: anp_step=thk, qu_code=', nextQuestion.qu_code);
+          console.log('✅ [성향진단 완료] answer_progress 테이블 업데이트 완료: anp_step=thk, qu_code=', nextQuestion.qu_code);
           
           // 성향 진단 완료 상태로 설정하여 안내페이지가 나타나도록 함
           isStepCompleted = true;
-          console.log('성향 진단 완료 상태로 설정 - 안내페이지 표시');
+          console.log('✅ [성향진단 완료] 성향 진단 완료 상태로 설정 - 안내페이지 표시');
         } else {
           isStepCompleted = true;
-          console.log('성향 진단 완료 - 사고력 진단 문항 없음');
+          console.log('⚠️ [성향진단 완료] 성향 진단 완료 - 사고력 진단 문항 없음');
         }
       } else if (step === 'thk') {
         // 사고력 진단에서 현재 파일명의 문제가 완료되면 다음 파일명의 문제로 진행
@@ -231,7 +321,95 @@ export async function POST(
           `;
         } else {
           // 사고력 진단 완료 후 선호도 진단(img)으로 전환
-          console.log('사고력 진단 완료. 선호도 진단으로 전환 시도...');
+          console.log('🎯 [사고력진단 완료] 선호도 진단으로 전환 시도...');
+          
+          // 💾 사고력 진단 점수 계산 및 저장 먼저 실행
+          try {
+            console.log('📊 [사고력진단 점수] 점수 계산 시작 - anp_seq:', anp_seq);
+            
+            // 1. 기존 점수 데이터 삭제
+            await prisma.$queryRaw`
+              DELETE FROM mwd_score1 
+              WHERE anp_seq = ${anp_seq}::integer 
+              AND sc1_step = 'thk'
+            `;
+            console.log('✅ [사고력진단 점수] 기존 점수 데이터 삭제 완료');
+            
+            // 2. 점수 계산을 위한 데이터 존재 여부 확인
+            const answerCountResult = await prisma.$queryRaw`
+              SELECT COUNT(*) as answer_count
+              FROM mwd_answer an
+              JOIN mwd_question qu ON qu.qu_code = an.qu_code 
+              WHERE an.anp_seq = ${anp_seq}::integer 
+                AND qu.qu_qusyn = 'Y' 
+                AND qu.qu_use = 'Y' 
+                AND qu.qu_kind1 = 'thk' 
+                AND an.an_ex >= 0 
+                AND an.an_progress > 0
+            `;
+            
+            const answerCount = Array.isArray(answerCountResult) && answerCountResult.length > 0 
+              ? Number(answerCountResult[0].answer_count) 
+              : 0;
+              
+            console.log(`📊 [사고력진단 점수] 사고력진단 답변 개수: ${answerCount}개`);
+            
+            if (answerCount > 0) {
+              // 3. 새로운 점수 데이터 계산 및 삽입
+              await prisma.$queryRaw`
+                INSERT INTO mwd_score1 
+                (anp_seq, sc1_step, qua_code, sc1_score, sc1_rate, sc1_rank, sc1_qcnt) 
+                SELECT 
+                  ${anp_seq}::integer AS anpseq, 
+                  'thk' AS thk, 
+                  COALESCE(qa.qua_code, qu.qu_kind2) AS qua_code,
+                  COALESCE(sum(an.an_wei), 0) AS score, 
+                  CASE 
+                    WHEN COALESCE(qa.qua_totalscore, 1) = 0 THEN 0
+                    ELSE round(cast(COALESCE(sum(an.an_wei), 0) AS numeric)/cast(COALESCE(qa.qua_totalscore, 1) AS numeric),3)
+                  END AS rate, 
+                  row_number() OVER (ORDER BY 
+                    CASE 
+                      WHEN COALESCE(qa.qua_totalscore, 1) = 0 THEN 0
+                      ELSE round(cast(COALESCE(sum(an.an_wei), 0) AS numeric)/cast(COALESCE(qa.qua_totalscore, 1) AS numeric),3)
+                    END DESC, 
+                    count(*) DESC
+                  ) AS rank,
+                  count(*) AS cnt
+                FROM 
+                  mwd_answer an
+                  JOIN mwd_question qu ON qu.qu_code = an.qu_code 
+                  LEFT JOIN mwd_question_attr qa ON qa.qua_code = qu.qu_kind2
+                WHERE 
+                  an.anp_seq = ${anp_seq}::integer 
+                  AND qu.qu_qusyn = 'Y' 
+                  AND qu.qu_use = 'Y' 
+                  AND qu.qu_kind1 = 'thk' 
+                  AND an.an_ex >= 0 
+                  AND an.an_progress > 0 
+                GROUP BY 
+                  COALESCE(qa.qua_code, qu.qu_kind2), COALESCE(qa.qua_totalscore, 1)
+              `;
+              
+              console.log('✅ [사고력진단 점수] 점수 계산 및 저장 완료');
+              
+              // 저장된 점수 확인
+              const savedScoresResult = await prisma.$queryRaw`
+                SELECT qua_code, sc1_score, sc1_rate, sc1_rank, sc1_qcnt
+                FROM mwd_score1 
+                WHERE anp_seq = ${anp_seq}::integer AND sc1_step = 'thk'
+                ORDER BY sc1_rank
+              `;
+              
+              console.log('📊 [사고력진단 점수] 저장된 점수 목록:', savedScoresResult);
+            } else {
+              console.log('⚠️ [사고력진단 점수] 점수 계산할 답변이 없음');
+            }
+            
+          } catch (scoreError) {
+            console.error('❌ [사고력진단 점수] 점수 계산 중 오류:', scoreError);
+            // 점수 계산 실패해도 다음 단계로 진행
+          }
           
           const preferenceQuestionResult = await prisma.$queryRaw`
             SELECT 
@@ -259,7 +437,7 @@ export async function POST(
           
           if (Array.isArray(preferenceQuestionResult) && preferenceQuestionResult.length > 0) {
             nextQuestion = preferenceQuestionResult[0];
-            console.log('선호도 진단 첫 문항 찾음:', nextQuestion);
+            console.log('🎯 [사고력진단 완료] 선호도 진단 첫 문항 찾음:', nextQuestion);
             
             // answer_progress의 단계를 선호도 진단으로 업데이트
             await prisma.$queryRaw`
@@ -271,14 +449,109 @@ export async function POST(
             
             // 사고력 진단 완료 상태로 설정하여 안내페이지가 나타나도록 함
             isStepCompleted = true;
-            console.log('사고력 진단 완료 상태로 설정 - 안내페이지 표시');
+            console.log('✅ [사고력진단 완료] 사고력 진단 완료 상태로 설정 - 안내페이지 표시');
           } else {
             isStepCompleted = true;
-            console.log('사고력 진단 완료 - 선호도 진단 문항 없음');
+            console.log('⚠️ [사고력진단 완료] 사고력 진단 완료 - 선호도 진단 문항 없음');
           }
         }
-      } else {
+      } else if (step === 'img') {
+        // 선호도 진단 완료 처리
+        console.log('🎯 [선호도진단 완료] 전체 테스트 완료 처리 시작...');
+        
+        // 💾 선호도 진단 점수 계산 및 저장 먼저 실행
+        try {
+          console.log('📊 [선호도진단 점수] 점수 계산 시작 - anp_seq:', anp_seq);
+          
+          // 1. 기존 점수 데이터 삭제
+          await prisma.$queryRaw`
+            DELETE FROM mwd_score1 
+            WHERE anp_seq = ${anp_seq}::integer 
+            AND sc1_step = 'img'
+          `;
+          console.log('✅ [선호도진단 점수] 기존 점수 데이터 삭제 완료');
+          
+          // 2. 점수 계산을 위한 데이터 존재 여부 확인
+          const answerCountResult = await prisma.$queryRaw`
+            SELECT COUNT(*) as answer_count
+            FROM mwd_answer an
+            JOIN mwd_question qu ON qu.qu_code = an.qu_code 
+            WHERE an.anp_seq = ${anp_seq}::integer 
+              AND qu.qu_qusyn = 'Y' 
+              AND qu.qu_use = 'Y' 
+              AND qu.qu_kind1 = 'img' 
+              AND an.an_ex >= 0 
+              AND an.an_progress > 0
+          `;
+          
+          const answerCount = Array.isArray(answerCountResult) && answerCountResult.length > 0 
+            ? Number(answerCountResult[0].answer_count) 
+            : 0;
+            
+          console.log(`📊 [선호도진단 점수] 선호도진단 답변 개수: ${answerCount}개`);
+          
+          if (answerCount > 0) {
+            // 3. 새로운 점수 데이터 계산 및 삽입
+            await prisma.$queryRaw`
+              INSERT INTO mwd_score1 
+              (anp_seq, sc1_step, qua_code, sc1_score, sc1_rate, sc1_rank, sc1_qcnt) 
+              SELECT 
+                ${anp_seq}::integer AS anpseq, 
+                'img' AS img, 
+                COALESCE(qa.qua_code, qu.qu_kind3) AS qua_code,
+                COALESCE(sum(an.an_wei), 0) AS score, 
+                CASE 
+                  WHEN COALESCE(qa.qua_totalscore, 1) = 0 THEN 0
+                  ELSE round(cast(COALESCE(sum(an.an_wei), 0) AS numeric)/cast(COALESCE(qa.qua_totalscore, 1) AS numeric),3)
+                END AS rate, 
+                row_number() OVER (ORDER BY 
+                  CASE 
+                    WHEN COALESCE(qa.qua_totalscore, 1) = 0 THEN 0
+                    ELSE round(cast(COALESCE(sum(an.an_wei), 0) AS numeric)/cast(COALESCE(qa.qua_totalscore, 1) AS numeric),3)
+                  END DESC, 
+                  count(*) DESC
+                ) AS rank,
+                count(*) AS cnt
+              FROM 
+                mwd_answer an
+                JOIN mwd_question qu ON qu.qu_code = an.qu_code 
+                LEFT JOIN mwd_question_attr qa ON qa.qua_code = qu.qu_kind3
+              WHERE 
+                an.anp_seq = ${anp_seq}::integer 
+                AND qu.qu_qusyn = 'Y' 
+                AND qu.qu_use = 'Y' 
+                AND qu.qu_kind1 = 'img' 
+                AND an.an_ex >= 0 
+                AND an.an_progress > 0 
+              GROUP BY 
+                COALESCE(qa.qua_code, qu.qu_kind3), COALESCE(qa.qua_totalscore, 1)
+            `;
+            
+            console.log('✅ [선호도진단 점수] 점수 계산 및 저장 완료');
+            
+            // 저장된 점수 확인
+            const savedScoresResult = await prisma.$queryRaw`
+              SELECT qua_code, sc1_score, sc1_rate, sc1_rank, sc1_qcnt
+              FROM mwd_score1 
+              WHERE anp_seq = ${anp_seq}::integer AND sc1_step = 'img'
+              ORDER BY sc1_rank
+            `;
+            
+            console.log('📊 [선호도진단 점수] 저장된 점수 목록:', savedScoresResult);
+          } else {
+            console.log('⚠️ [선호도진단 점수] 점수 계산할 답변이 없음');
+          }
+          
+        } catch (scoreError) {
+          console.error('❌ [선호도진단 점수] 점수 계산 중 오류:', scoreError);
+          // 점수 계산 실패해도 완료 처리 계속
+        }
+        
         // 모든 단계 완료
+        isStepCompleted = true;
+        console.log('✅ [선호도진단 완료] 선호도 진단 완료 - 전체 테스트 완료');
+      } else {
+        // 기타 모든 단계 완료
         isStepCompleted = true;
         console.log('모든 단계 완료');
       }
@@ -698,55 +971,10 @@ export async function POST(
         
         try {
           if (step === 'tnd') {
-            // 성향 진단 완료 처리
-            console.log('성향 진단 점수 계산 시작');
+            // 성향 진단 완료 처리 (점수는 이미 앞에서 저장됨)
+            console.log('📝 [성향진단 완료 2차] 이미 점수 저장됨, 단계 전환만 처리');
             
-            // 1. 기존 점수 데이터 삭제
-            await prisma.$queryRaw`
-              DELETE FROM mwd_score1 
-              WHERE anp_seq = ${anp_seq}::integer 
-              AND sc1_step = 'tnd'
-            `;
-            
-            // 2. 새로운 점수 데이터 계산 및 삽입
-            await prisma.$queryRaw`
-              INSERT INTO mwd_score1 
-              (anp_seq, sc1_step, qua_code, sc1_score, sc1_rate, sc1_rank, sc1_qcnt) 
-              SELECT 
-                ${anp_seq}::integer AS anpseq, 
-                'tnd' AS tnd, 
-                qua_code, 
-                score, 
-                rate, 
-                row_number() OVER (ORDER BY rate DESC, fcnt DESC, ocnt), 
-                cnt 
-              FROM (
-                SELECT 
-                  qa.qua_code, 
-                  sum(an.an_wei) AS score, 
-                  round(cast(sum(an.an_wei) AS numeric)/cast(qa.qua_totalscore AS numeric),3) AS rate, 
-                  count(*) AS cnt, 
-                  cast(sum(CASE WHEN an.an_wei = 5 THEN 1 ELSE 0 END) AS numeric) AS fcnt, 
-                  cast(sum(CASE WHEN an.an_wei = 1 THEN 1 ELSE 0 END) AS numeric) AS ocnt 
-                FROM 
-                  mwd_answer an, 
-                  mwd_question qu, 
-                  mwd_question_attr qa 
-                WHERE 
-                  an.anp_seq = ${anp_seq}::integer 
-                  AND qu.qu_code = an.qu_code 
-                  AND qu.qu_qusyn = 'Y' 
-                  AND qu.qu_use = 'Y' 
-                  AND qu.qu_kind1 = 'tnd' 
-                  AND qa.qua_code = qu.qu_kind2 
-                  AND an.an_ex > 0 
-                  AND an.an_progress > 0 
-                GROUP BY 
-                  qa.qua_code, qa.qua_totalscore
-              ) AS t1
-            `;
-            
-            // 3. 다음 단계(사고력 진단)로 업데이트
+            // 다음 단계(사고력 진단)로 업데이트
             await prisma.$queryRaw`
               UPDATE mwd_answer_progress 
               SET qu_code = 'thk00000', 
@@ -755,10 +983,13 @@ export async function POST(
               WHERE anp_seq = ${anp_seq}::integer
             `;
             
-            console.log('성향 진단 점수 계산 및 사고력 진단 단계로 업데이트 완료');
+            console.log('✅ [성향진단 완료 2차] 사고력 진단 단계로 업데이트 완료');
             
           } else if (step === 'thk') {
-            // 사고력 진단 완료 처리 - 선호도 진단으로 전환
+            // 사고력 진단 완료 처리 (점수는 이미 앞에서 저장됨)
+            console.log('📝 [사고력진단 완료 2차] 이미 점수 저장됨, 단계 전환만 처리');
+            
+            // 선호도 진단으로 전환
             await prisma.$queryRaw`
               UPDATE mwd_answer_progress 
               SET qu_code = 'img00000', 
@@ -767,10 +998,13 @@ export async function POST(
               WHERE anp_seq = ${anp_seq}::integer
             `;
             
-            console.log('사고력 진단 완료, 선호도 진단 단계로 업데이트 완료');
+            console.log('✅ [사고력진단 완료 2차] 선호도 진단 단계로 업데이트 완료');
             
           } else if (step === 'img') {
-            // 선호도 진단 완료 처리 - 전체 테스트 완료
+            // 선호도 진단 완료 처리 (점수는 이미 앞에서 저장됨)
+            console.log('📝 [선호도진단 완료 2차] 이미 점수 저장됨, 완료 처리만 실행');
+            
+            // 전체 테스트 완료 처리
             await prisma.$queryRaw`
               UPDATE mwd_answer_progress 
               SET anp_done = 'E', 
@@ -778,7 +1012,7 @@ export async function POST(
               WHERE anp_seq = ${anp_seq}::integer
             `;
             
-            console.log('선호도 진단 완료, 전체 테스트 완료 처리됨');
+            console.log('✅ [선호도진단 완료 2차] 전체 테스트 완료 처리됨');
           }
           
           // 응답 데이터에 단계 완료 플래그 및 다음 단계 정보 추가
