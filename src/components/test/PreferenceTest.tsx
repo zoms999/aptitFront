@@ -87,16 +87,6 @@ export default function PreferenceTest({
         </div>
       )}
 
-      {/* 이미지 번호 표시 */}
-      {/* <div className="mb-8">
-        <div className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-xl shadow-lg font-bold">
-          <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-          </svg>
-          이미지 {currentImageNumber}
-        </div>
-      </div> */}
-
       <div className="relative group mb-12">
         <div className="absolute -inset-1 bg-gradient-to-r from-purple-600 via-pink-600 to-rose-600 rounded-3xl blur-xl opacity-20 group-hover:opacity-30 transition duration-500"></div>
         <div className="relative bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/40 p-10 hover:shadow-3xl transition-all duration-500">
@@ -111,7 +101,6 @@ export default function PreferenceTest({
                   </div>
                 </div>
                 <div className="flex-1">
-                  {/* <h3 className="text-2xl font-bold text-gray-900 mb-2">감성 반응 테스트</h3> */}
                   <p className="text-lg text-gray-700 leading-relaxed">
                     이미지를 보고 처음 떠오르는 느낌을 
                     <span className="relative inline-block mx-2">
@@ -175,11 +164,12 @@ export default function PreferenceTest({
                         ? 'bg-gradient-to-r from-purple-500 to-pink-600 opacity-75'
                         : 'bg-gradient-to-r from-purple-400 to-pink-500'
                     }`}></div>
+                    {/* ✅ [수정] 버튼 스타일 변경 */}
                     <button
                       onClick={() => onSelectChoice(question.qu_code, choice.an_val, choice.an_wei)}
-                      className={`relative w-full py-8 px-6 text-center rounded-3xl transition-all duration-300 hover:scale-105 hover:-translate-y-2 ${
+                      className={`relative w-full py-4 px-6 text-center rounded-3xl transition-all duration-300 hover:scale-105 hover:-translate-y-1 ${
                         selectedAnswers[question.qu_code] === choice.an_val
-                          ? 'bg-gradient-to-r from-purple-500 to-pink-600 text-white shadow-2xl scale-105 -translate-y-2'
+                          ? 'bg-gradient-to-r from-purple-500 to-pink-600 text-white shadow-2xl scale-105 -translate-y-1'
                           : 'bg-white/90 backdrop-blur-sm border border-gray-200/60 text-gray-700 hover:bg-white hover:shadow-xl hover:border-gray-300/60'
                       }`}
                     >
@@ -202,16 +192,8 @@ export default function PreferenceTest({
                           )}
                         </div>
                       ) : (
-                        <div className="flex flex-col items-center space-y-3">
-                          <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-lg font-bold transition-all duration-300 ${
-                            selectedAnswers[question.qu_code] === choice.an_val
-                              ? 'bg-white/20 text-white'
-                              : 'bg-gradient-to-br from-purple-500 to-pink-600 text-white shadow-lg'
-                          }`}>
-                            {choice.an_val}
-                          </div>
-                          <span className="text-base font-semibold leading-relaxed">{choice.an_text}</span>
-                        </div>
+                        // ✅ [수정] 번호 아이콘 제거 및 텍스트 중앙 정렬
+                        <span className="text-lg font-semibold leading-relaxed">{choice.an_text}</span>
                       )}
                       
                       {/* 선택 표시 */}
@@ -234,4 +216,4 @@ export default function PreferenceTest({
       </div>
     </>
   );
-} 
+}

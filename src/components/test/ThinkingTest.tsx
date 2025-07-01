@@ -88,9 +88,10 @@ export default function ThinkingTest({ questions, selectedAnswers, onSelectChoic
       </div>
     );
   }
-
+  
+  // ✅ [수정] 불필요한 높이 및 배경 클래스 제거
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100">
+    <div>
       {Object.entries(groupedQuestions).map(([templateType, questionsForTemplate]) => {
         // 각 템플릿 타입별로 TestData 객체 생성
         const testData: TestData = {

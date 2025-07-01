@@ -37,7 +37,13 @@ export async function POST(
       return NextResponse.json({ error: '필수 파라미터가 누락되었습니다' }, { status: 400 });
     }
 
-    console.log(`답변 저장 API 호출 - anp_seq: ${anp_seq}, qu_code: ${qu_code}, an_val: ${an_val}`);
+    console.log('[DEBUG] 답변 저장 파라미터:', {
+      anp_seq,
+      qu_code,
+      an_val,
+      an_wei,
+      step
+    });
 
     // 1. 답변 저장 (이미 존재하는 경우 업데이트, 없는 경우 삽입)
     // an_ex 컬럼이 integer 타입이므로 text 캐스팅 제거
@@ -69,10 +75,7 @@ export async function POST(
               ap.anp_seq, 
               qu.qu_code, 
               qu.qu_filename,
-              CASE 
-                  WHEN an.an_progress < 0 THEN an.an_progress 
-                  ELSE COALESCE(an.an_progress, ROW_NUMBER() OVER (ORDER BY co.coc_order, qu.qu_kind2, qu_order))
-              END AS progress, 
+              ROW_NUMBER() OVER (ORDER BY co.coc_order, qu.qu_kind2, qu_order) AS progress,
               qu.qu_kind1 AS step, 
               qu.qu_action, 
               COALESCE(qa.qua_type, '-') AS qua_type, 
