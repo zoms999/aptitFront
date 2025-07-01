@@ -39,10 +39,10 @@ export default function MultiSurveyTemplate({ testData, selectedAnswers, onSelec
       <div className="relative bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/40 p-6 md:p-10 hover:shadow-3xl transition-all duration-500">
         
         {/* 템플릿 헤더 (좀 더 심플하게) */}
-        <div className="mb-10 text-center">
+        {/* <div className="mb-10 text-center">
           <h2 className="text-2xl font-bold text-slate-800">복수 문항 설문</h2>
           <p className="text-sm text-slate-500 mt-1">해당하는 답변을 선택해주세요.</p>
-        </div>
+        </div> */}
         
         {/* 질문 목록 */}
         {questions.map((question, questionIndex) => (

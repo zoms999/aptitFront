@@ -28,7 +28,7 @@ export default function TestHeader({ testData }: TestHeaderProps) {
             {/* 단계별 진행 상태 */}
             <div className="flex items-center gap-3">
               {[
-                { step: 1, name: '성향진단', color: 'blue' },
+                { step: 1, name: '성향분석', color: 'blue' },
                 { step: 2, name: '사고력진단', color: 'indigo' },
                 { step: 3, name: '선호도진단', color: 'purple' }
               ].map(({ step, name, color }) => (

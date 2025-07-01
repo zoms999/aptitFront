@@ -590,21 +590,18 @@ export default function TestStartPage({ params }: TestStartPageProps) {
 
       {/* 컨텐츠 영역 */}
       <div className="flex-grow relative z-10">
-        {/* ▼▼▼▼▼ 여기가 수정된 부분입니다 ▼▼▼▼▼ */}
-        <div className="max-w-7xl mx-auto px-4 py-8">
-        {/* ▲▲▲▲▲ 여기가 수정된 부분입니다 ▲▲▲▲▲ */}
-
+        <div className="max-w-7xl mx-auto px-4 py-2">
           {/* 성향 진단 단계명 표시 */}
-          {isPersonalityTest && (
-            <div className="mb-8">
+          {/* {isPersonalityTest && (
+            <div className="mb-2">
               <div className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl shadow-lg font-bold">
                 <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
-                검사 단계 {testData?.qua_type || 1}
+                {testData?.qua_type ? `${testData.qua_type} 분석` : '성향 분석'}
               </div>
             </div>
-          )}
+          )} */}
 
           {/* 디버깅 정보 */}
           {/* {process.env.NODE_ENV === 'development' && (

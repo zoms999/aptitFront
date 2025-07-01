@@ -1,5 +1,3 @@
-"use client"
-
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { AlertTriangle, Award, ChevronRight, ClipboardCheck, Loader2 } from "lucide-react"
@@ -88,19 +86,24 @@ export default function TestStartModal({ testId }: TestStartModalProps) {
       {/* Main content */}
       <div className="flex-grow overflow-y-auto p-4 md:p-8 flex flex-col items-center">
         <Card className="w-full max-w-3xl mx-auto bg-white rounded-xl shadow-xl border-0 overflow-hidden">
-          <CardHeader className="bg-blue-50 border-b border-blue-100">
-            <div className="flex items-center space-x-3">
-              <div className="bg-blue-600 p-2 rounded-lg">
-                <ClipboardCheck className="h-6 w-6 text-white" />
-              </div>
-              <h2 className="text-2xl font-bold text-blue-800">검사유의사항</h2>
+          <CardHeader className="bg-blue-50 border-b border-blue-100 py-6">
+            <div className="flex justify-center items-center">
+              <Image 
+                src="/assets/img/ogs.png"
+                alt="검사유의사항"
+                width={180}
+                height={30}
+                priority
+              />
             </div>
           </CardHeader>
           <CardContent className="p-6 md:p-8">
             <div className="text-gray-700 space-y-6">
-              <p className="text-lg">
-                옥타그노시스검사를 시작하기 전, 검사의 효과를 높이기 위해 아래 내용을 꼼꼼하게 읽어주시면
-                감사하겠습니다.
+              <p className="text-lg text-center">
+                국내최초로 적성검사에서 기술특허를 받은 <br />
+                ‘옥타그노시스 검사’를 시작하시는 여러분을 환영합니다. <br /><br />
+                교육과학적인 문항이 AI와 결합하여 구성된 ‘옥타그노시스 검사’를 <br />
+                시작하시기 전 아래의 유의사항을 꼼꼼하게 읽어주시기 바랍니다.
               </p>
 
               <div className="bg-amber-50 border-l-4 border-amber-400 p-4 rounded-r-lg">
@@ -113,15 +116,20 @@ export default function TestStartModal({ testId }: TestStartModalProps) {
               </div>
 
               <ol className="list-decimal list-outside space-y-3 pl-6">
-                <li className="text-gray-800">검사 진행시 모든 문항에 솔직하게 답변해주세요.</li>
                 <li className="text-gray-800">
-                  시간 제한이 있는 문항에는 반드시 시간을 엄수해서 답해 주시기 바랍니다.
+                  당신에 대한 정확한 검사결과 도출을 위해 모든 문항에 솔직하게 답변해주시기 바랍니다.
                 </li>
                 <li className="text-gray-800">
-                  고민이 되거나 어려운 문제가 나올 시 시간을 지체하지 마시고, 생각 속에 떠오르는 대로 선택해주세요.
+                  시간 제한이 있는 문항은 제한 시간을 엄수하여 답하실 수 있도록 합니다.
                 </li>
                 <li className="text-gray-800">
-                  검사에 방해가 될 수 있는 휴대전화, 전자기기 등은 무음이나 비행기모드로 하시고 검사를 진행해 주세요.
+                  너무 오래 생각하지 말고, 가장 먼저 떠오르는 생각으로 답변하시기 바랍니다.
+                </li>
+                <li className="text-gray-800">
+                  검사가 시작되면, 중간에 멈추지 마시고 끝까지 한번에 진행해주세요. (부득이 중도에 멈추게 될 경우, 로그아웃 하신 후 나중에 다시 진행하실 때, 재로그인하시어 중단되었던 부분부터 재진행하시기 바랍니다.)
+                </li>
+                <li className="text-gray-800">
+                  검사에 방해가 되지 않도록 휴대전화, 전자기기 등은 무음이나 비행기모드로 하시고 진행해주세요.
                 </li>
               </ol>
             </div>
@@ -149,7 +157,7 @@ export default function TestStartModal({ testId }: TestStartModalProps) {
         </Card>
 
         {/* Awards section */}
-        <div className="w-full max-w-4xl mt-10 p-6 bg-white rounded-xl shadow-md">
+        {/* <div className="w-full max-w-4xl mt-10 p-6 bg-white rounded-xl shadow-md">
           <h3 className="text-center text-lg font-semibold text-gray-700 mb-6 flex items-center justify-center">
             <Award className="h-5 w-5 mr-2 text-blue-600" />
             인증 및 수상
@@ -223,7 +231,7 @@ export default function TestStartModal({ testId }: TestStartModalProps) {
               </p>
             </li>
           </ul>
-        </div>
+        </div> */}
       </div>
 
       {/* Footer */}

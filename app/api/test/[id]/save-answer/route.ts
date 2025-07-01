@@ -186,6 +186,8 @@ export async function POST(
           currentFilename = currentFilenameResult[0].qu_filename;
         }
         
+        console.log(`[사고력 진단 디버깅] 현재 문항: ${qu_code}, 현재 파일명: ${currentFilename}`);
+        
         // 사고력 진단의 다음 파일명 문제 조회
         const nextThinkingQuestionResult = await prisma.$queryRaw`
           SELECT 
@@ -211,6 +213,8 @@ export async function POST(
           ORDER BY qu.qu_filename, qu.qu_order
           LIMIT 1
         `;
+        
+        console.log(`[사고력 진단 디버깅] 다음 문항 검색 결과:`, nextThinkingQuestionResult);
         
         if (Array.isArray(nextThinkingQuestionResult) && nextThinkingQuestionResult.length > 0) {
           nextQuestion = nextThinkingQuestionResult[0];

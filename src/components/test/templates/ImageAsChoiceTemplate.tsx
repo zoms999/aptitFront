@@ -15,9 +15,10 @@ export default function ImageAsChoiceTemplate({ testData, selectedAnswers, onSel
     return questions;
   }, [questions]);
 
-  // --- 타이머 상태 관리 및 로직 (변경 없음) ---
+  // --- 타이머 상태 관리 및 로직 ---
   const [timerStates, setTimerStates] = useState<Record<string, TimerState>>({});
   const [isReady, setIsReady] = useState(false);
+  const [isPreTimerActive, setIsPreTimerActive] = useState(true);
 
   useEffect(() => {
     if (!stableQuestions || stableQuestions.length === 0) {
@@ -37,16 +38,46 @@ export default function ImageAsChoiceTemplate({ testData, selectedAnswers, onSel
         if (isAlreadyCompleted) {
           newTimerStates[question.qu_code] = { timeLeft: 0, isActive: false, isCompleted: true, totalTime: timeLimitSec };
         } else {
-          newTimerStates[question.qu_code] = { timeLeft: timeLimitSec, isActive: true, isCompleted: false, totalTime: timeLimitSec };
+          // ✅ 처음에는 비활성화 상태로 설정
+          newTimerStates[question.qu_code] = { timeLeft: timeLimitSec, isActive: false, isCompleted: false, totalTime: timeLimitSec };
         }
       }
     });
     setTimerStates(newTimerStates);
     if (!isReady) setIsReady(true);
+    
+    // ✅ stableQuestions가 변경될 때마다 대기 상태를 다시 활성화
+    setIsPreTimerActive(true);
   }, [stableQuestions, isReady]);
 
+  // ✅ stableQuestions가 변경될 때마다 15초 대기 후 타이머 활성화
   useEffect(() => {
-    if (!isReady) return;
+    // stableQuestions가 없으면 실행하지 않음
+    if (!stableQuestions || stableQuestions.length === 0) return;
+    
+    const preTimer = setTimeout(() => {
+      setIsPreTimerActive(false);
+      // 15초 후 모든 타이머를 활성화
+      setTimerStates(prev => {
+        const newStates = { ...prev };
+        Object.keys(newStates).forEach(questionCode => {
+          const state = newStates[questionCode];
+          if (state && !state.isCompleted) {
+            newStates[questionCode] = {
+              ...state,
+              isActive: true
+            };
+          }
+        });
+        return newStates;
+      });
+    }, 15000); // 15초
+
+    return () => clearTimeout(preTimer);
+  }, [stableQuestions]); // ✅ stableQuestions 의존성 추가
+
+  useEffect(() => {
+    if (!isReady || isPreTimerActive) return;
     const intervalId = setInterval(() => {
       setTimerStates(prevStates => {
         const newStates = { ...prevStates };

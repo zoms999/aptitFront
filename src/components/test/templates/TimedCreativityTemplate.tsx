@@ -1,16 +1,14 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { TemplateProps, TimerState } from './types';
 import {
-  CircularProgress,
   formatTime,
-  getTimerProgress,
   getCurrentStep,
   getCompletedTimersFromStorage,
   saveCompletedTimerToStorage,
   DevControls,
 } from './utils';
 
-const PRE_TIMER_DELAY_MS = 5000; // 5초
+const PRE_TIMER_DELAY_MS = 15000; // 15초
 
 export default function TimedCreativityTemplate({ testData, selectedAnswers, onSelectChoice }: TemplateProps) {
   const questions = testData.questions;
@@ -22,8 +20,9 @@ export default function TimedCreativityTemplate({ testData, selectedAnswers, onS
 
   const [timerStates, setTimerStates] = useState<Record<string, TimerState>>({});
   const [isReady, setIsReady] = useState(false);
-
-  // --- 1. 타이머 상태 초기화 Effect ---
+  const [isPreTimerActive, setIsPreTimerActive] = useState(true);
+  
+  // --- 타이머 상태 초기화 Effect ---
   useEffect(() => {
     if (!stableQuestions || stableQuestions.length === 0) {
       setIsReady(false);
@@ -48,39 +47,34 @@ export default function TimedCreativityTemplate({ testData, selectedAnswers, onS
     });
     setTimerStates(newTimerStates);
     if (!isReady) setIsReady(true);
-  }, [stableQuestions]); // isReady는 여기서 관리하지 않으므로 제거해도 무방합니다.
+    
+    setIsPreTimerActive(true);
+  }, [stableQuestions]);
 
-
-  // --- 2. 타이머 시작 지연 Effect ---
+  // --- 15초 대기 후 타이머 활성화 Effect ---
   useEffect(() => {
-    if (!isReady) return;
-
-    const pendingTimerCodes = Object.keys(timerStates).filter(
-      (code) => timerStates[code] && !timerStates[code].isActive && !timerStates[code].isCompleted
-    );
-
-    if (pendingTimerCodes.length === 0) return;
-
-    const delayTimeoutId = setTimeout(() => {
-      setTimerStates((prevStates) => {
-        const newStates = { ...prevStates };
-        pendingTimerCodes.forEach(code => {
-          if (newStates[code]) {
-            newStates[code].isActive = true;
+    if (!stableQuestions || stableQuestions.length === 0) return;
+    
+    const preTimer = setTimeout(() => {
+      setIsPreTimerActive(false);
+      setTimerStates(prev => {
+        const newStates = { ...prev };
+        Object.keys(newStates).forEach(questionCode => {
+          const state = newStates[questionCode];
+          if (state && !state.isCompleted) {
+            newStates[questionCode] = { ...state, isActive: true };
           }
         });
         return newStates;
       });
     }, PRE_TIMER_DELAY_MS);
 
-    return () => clearTimeout(delayTimeoutId);
-    // ✅ [수정] timerStates를 의존성 배열에 추가하여, timerStates가 변경될 때마다 이 Effect가 최신 상태를 가지고 실행되도록 합니다.
-  }, [isReady, timerStates]); 
+    return () => clearTimeout(preTimer);
+  }, [stableQuestions]);
 
-
-  // --- 3. 실제 카운트다운 Effect ---
+  // --- 실제 카운트다운 Effect ---
   useEffect(() => {
-    if (!isReady) return;
+    if (!isReady || isPreTimerActive) return;
 
     const intervalId = setInterval(() => {
       setTimerStates((prevStates) => {
@@ -104,15 +98,45 @@ export default function TimedCreativityTemplate({ testData, selectedAnswers, onS
     }, 1000);
 
     return () => clearInterval(intervalId);
-    // ✅ [수정] 이 Effect는 isReady만 의존해도 괜찮습니다. setInterval 콜백 안에서 prevStates를 사용하므로 항상 최신 상태를 참조합니다.
-  }, [isReady]);
+  }, [isReady, stableQuestions, isPreTimerActive]);
 
+  // --- 개발용 함수들 ---
+  const handleSkipTimer = (questionCode: string) => {
+    if (process.env.NODE_ENV !== 'development') return;
+    setTimerStates(prev => ({
+      ...prev,
+      [questionCode]: {
+        ...prev[questionCode],
+        timeLeft: 0,
+        isActive: false,
+        isCompleted: true,
+      },
+    }));
+    setIsPreTimerActive(false);
+    const currentStep = getCurrentStep(stableQuestions);
+    saveCompletedTimerToStorage(questionCode, currentStep);
+  };
   
-  // 이하 렌더링 로직은 수정할 필요 없습니다. (기존 코드와 동일)
-  // ... (개발 모드 함수들 및 JSX)
-  const handleManualAutoSelect = () => { /* ... */ };
-  const handleForceCompleteTimer = () => { /* ... */ };
-  const handleClearCompletedTimers = () => { /* ... */ };
+  const handleManualAutoSelect = (): void => {
+    if (process.env.NODE_ENV !== 'development') return;
+    stableQuestions.forEach(q => {
+      const timerState = timerStates[q.qu_code];
+      if (timerState && !timerState.isCompleted) return;
+      if (q.choices.length > 0 && !selectedAnswers[q.qu_code]) {
+        const randomChoice = q.choices[Math.floor(Math.random() * q.choices.length)];
+        onSelectChoice(q.qu_code, randomChoice.an_val, randomChoice.an_wei);
+      }
+    });
+  };
+
+  const handleClearCompletedTimers = (): void => {
+    if (process.env.NODE_ENV !== 'development') return;
+    const currentStep = getCurrentStep(stableQuestions);
+    localStorage.removeItem(`completedTimers_${currentStep}`);
+    setIsReady(false); 
+    setTimerStates({});
+  };
+  
   const hasActiveTimers = Object.values(timerStates).some((state) => state?.isActive);
 
   if (!isReady) {
@@ -124,11 +148,20 @@ export default function TimedCreativityTemplate({ testData, selectedAnswers, onS
     );
   }
 
+  const getPoemParts = (passage: string) => {
+    const lines = passage.split('\n').filter(line => line.trim() !== '' || line === '');
+    const midPoint = Math.ceil(lines.length / 2);
+    return {
+      left: lines.slice(0, midPoint),
+      right: lines.slice(midPoint)
+    };
+  };
+
   return (
     <div className="relative group">
        <DevControls
           onManualAutoSelect={handleManualAutoSelect}
-          onForceCompleteTimer={handleForceCompleteTimer}
+          onForceCompleteTimer={() => stableQuestions.forEach(q => q.qu_time_limit_sec && handleSkipTimer(q.qu_code))}
           onClearCompletedTimers={handleClearCompletedTimers}
           hasActiveTimers={hasActiveTimers}
         />
@@ -137,85 +170,121 @@ export default function TimedCreativityTemplate({ testData, selectedAnswers, onS
         
         {stableQuestions.map((question) => {
           const timerState = timerStates[question.qu_code];
-          const isTimerActive = timerState?.isActive;
+          const hasTimeLimit = timerState !== undefined;
           const isTimerCompleted = timerState?.isCompleted;
-          const isDelayPhase = !isTimerActive && !isTimerCompleted && timerState?.totalTime > 0;
+          const showChoices = !hasTimeLimit || isTimerCompleted;
+          
+          const poemParts = getPoemParts(question.qu_passage || '');
 
           return (
             <div key={question.qu_code}>
               <div className="flex items-start gap-3 md:gap-4 mb-6">
-                <span className="text-2xl font-bold text-pink-600 flex-shrink-0 mt-1">
+                <span className="text-xl font-bold text-slate-800 flex-shrink-0 mt-1">
                   {question.qu_order}.
                 </span>
                 <p className="text-xl text-slate-800 leading-relaxed font-semibold">
-                  다음은 안도현 시인이 쓴 ‘연탄 한 장’이라는 시의 일부분입니다.
+                  {question.qu_title || question.qu_text}
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-                <div className="lg:col-span-2">
-                  <div className="p-6 bg-slate-50 rounded-xl border border-slate-200 shadow-sm h-full">
-                    <div className="text-slate-700 text-base leading-relaxed space-y-2">
-                      {question.qu_passage?.split('\n').map((line, lineIndex) => (
-                        <p key={lineIndex}>{line || '\u00A0'}</p>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <div className="p-4 bg-red-100/60 border-l-4 border-red-500 rounded-r-lg">
-                    <div className="text-red-800 font-medium text-sm leading-relaxed space-y-1">
-                      {question.qu_instruction?.split('\n').map((line, lineIndex) => (
-                        <p key={lineIndex}>{line}</p>
-                      ))}
-                    </div>
-                  </div>
-                  
-                  {isTimerCompleted && question.qu_explain && (
-                    <div className="p-4 bg-blue-100/60 border-l-4 border-blue-500 rounded-r-lg animate-fade-in">
-                      <p className="text-blue-800 font-medium text-sm">
-                        답 문장 : 
-                        <span className="font-bold ml-1">
-                          {question.qu_explain.replace('답 문장 : (', '').replace(')', '')}
-                        </span>
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {isDelayPhase && (
-                <div className="text-center p-8 bg-gray-50/50 rounded-2xl border-2 border-dashed border-gray-200/80 animate-fade-in">
-                  <div className="flex flex-col items-center space-y-3">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <div className="text-gray-700 font-medium">잠시 후 타이머가 시작됩니다.</div>
-                    <div className="text-gray-500 text-sm">제시된 내용을 미리 살펴보세요.</div>
+              {/* ✅ 타이머 UI 복원 및 렌더링 */}
+              {hasTimeLimit && !showChoices && (
+                <div className="mb-6">
+                  <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-xl shadow-sm">
+                    {isPreTimerActive ? (
+                      <div className="flex items-center space-x-4">
+                        <div className="w-12 h-12 rounded-full flex items-center justify-center bg-sky-500 animate-pulse">
+                          <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        </div>
+                        <div>
+                          <div className="text-lg font-bold text-sky-700">잠시 후 시작합니다</div>
+                          <div className="text-sm text-gray-600">문제 내용을 미리 확인하세요.</div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between space-x-4">
+                        <div className="flex items-center space-x-4">
+                          <div className={`w-12 h-12 rounded-full flex items-center justify-center ${timerState.isActive ? 'bg-pink-500 animate-pulse' : 'bg-gray-500'}`}>
+                            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                          </div>
+                          <div>
+                            <div className={`text-2xl font-bold ${timerState.timeLeft <= 5 ? 'text-red-600' : 'text-gray-700'}`}>
+                              {formatTime(timerState.timeLeft)}
+                            </div>
+                            <div className="text-sm text-gray-600">
+                              {timerState.isActive ? '제한 시간' : '시간 종료 - 답을 선택하세요'}
+                            </div>
+                          </div>
+                        </div>
+                        {process.env.NODE_ENV === 'development' && timerState.isActive && (
+                          <button onClick={() => handleSkipTimer(question.qu_code)} className="px-3 py-1 bg-sky-500 text-white text-xs font-bold rounded-full shadow hover:bg-sky-600 transition-all transform hover:scale-105" title="개발용: 타이머를 즉시 종료합니다.">
+                            스킵
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    {!isPreTimerActive && timerState.totalTime > 0 && (
+                      <div className="mt-4">
+                        <div className="w-full bg-gray-200 rounded-full h-2.5">
+                          <div className={`h-2.5 rounded-full transition-all duration-1000 ease-linear ${timerState.timeLeft <= 5 ? 'bg-red-500' : 'bg-pink-500'}`} style={{ width: `${(timerState.timeLeft / timerState.totalTime) * 100}%` }}></div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
               
-              {isTimerActive && (
-                <div className="text-center p-8 bg-pink-50/50 rounded-2xl border-2 border-dashed border-pink-200/80">
-                  <div className="flex flex-col items-center space-y-4">
-                    <div className="relative w-24 h-24">
-                      <CircularProgress progress={getTimerProgress(timerState)} size={96} strokeWidth={6} color="pink" />
-                      <div className="absolute inset-0 flex items-center justify-center text-2xl font-bold text-pink-600">
-                        {formatTime(timerState.timeLeft)}
+              <div className="mb-8">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  <div className="lg:col-span-2 p-6 bg-slate-50 rounded-xl border border-slate-200 shadow-sm h-full">
+                    {!isTimerCompleted ? (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
+                        <div className="text-slate-700 text-base leading-relaxed space-y-2">
+                          {poemParts.left.map((line, lineIndex) => (
+                            <p key={`left-${lineIndex}`}>{line || '\u00A0'}</p>
+                          ))}
+                        </div>
+                        <div className="text-slate-700 text-base leading-relaxed space-y-2">
+                          {poemParts.right.map((line, lineIndex) => (
+                            <p key={`right-${lineIndex}`}>{line || '\u00A0'}</p>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                    <div className="text-pink-700 font-medium">시간이 종료되면 선택지가 나타납니다.</div>
-                    <div className="text-pink-600 text-sm">제시된 내용을 충분히 살펴보세요.</div>
+                    ) : (
+                      <div className="flex items-center justify-center text-center h-full min-h-[200px]">
+                        <p className="text-gray-500">시간이 종료되어 지문이 가려졌습니다.</p>
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="space-y-4">
+                      <div className="p-4 bg-red-100/60 border border-red-200 rounded-lg">
+                        <div className="text-red-800 font-medium text-sm leading-relaxed space-y-1">
+                          {question.qu_instruction?.split('\n').map((line, lineIndex) => (
+                            <p key={lineIndex}>{line}</p>
+                          ))}
+                        </div>
+                      </div>
+                      
+                      {isTimerCompleted && question.qu_explain && (
+                        <div className="p-4 bg-blue-100/60 border border-blue-200 rounded-lg animate-fade-in">
+                          <p className="text-blue-800 font-medium text-sm">
+                            답 문장 : 
+                            <span className="font-bold ml-1">
+                              {question.qu_explain.replace('답 문장 : (', '').replace(')', '')}
+                            </span>
+                          </p>
+                        </div>
+                      )}
                   </div>
                 </div>
-              )}
+              </div>
 
-              {isTimerCompleted && (
+              {showChoices && (
                 <div className="mt-8 pt-8 border-t border-gray-200 animate-fade-in">
-                  <div className="mb-6 text-center">
+                  <div className="mb-6">
                     <p className="text-xl text-slate-800 font-semibold">{question.qu_text}</p>
+
                   </div>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-3 max-w-4xl mx-auto">
                     {question.choices.map((choice) => (

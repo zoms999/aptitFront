@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { TemplateProps } from './types';
 
 export default function TimedProblemTemplate({ testData, selectedAnswers, onSelectChoice }: TemplateProps) {
@@ -12,37 +12,54 @@ export default function TimedProblemTemplate({ testData, selectedAnswers, onSele
     }
   }>({});
 
-  // ✅ [수정] 5초 대기 상태를 관리하는 새로운 상태 변수
   const [isPreTimerActive, setIsPreTimerActive] = useState(true);
 
-  // 타이머 초기화 로직 (변경 없음)
+  // 타이머 초기화 로직
   useEffect(() => {
-    const initialStates: { [key:string]: any } = {};
+    const initialStates: { [key: string]: {
+      timeLeft: number;
+      isActive: boolean;
+      isCompleted: boolean;
+    } } = {};
     questions.forEach(question => {
       const timeLimit = question.qu_time_limit_sec || 30;
       initialStates[question.qu_code] = {
         timeLeft: timeLimit,
-        isActive: true, // 초기에는 활성 상태로 두되, 실제 동작은 isPreTimerActive에 의해 제어됨
+        isActive: false, // 처음에는 비활성화
         isCompleted: false,
       };
     });
     setTimerStates(initialStates);
+    
+    // ✅ questions가 변경될 때마다 대기 상태를 다시 활성화
+    setIsPreTimerActive(true);
   }, [questions]);
 
-  // ✅ [수정] 5초 대기 후 메인 타이머를 활성화하는 로직
+  // ✅ questions가 변경될 때마다 15초 대기 후 타이머 활성화
   useEffect(() => {
-    // 이 useEffect는 컴포넌트가 마운트될 때 한 번만 실행됩니다.
+    // questions가 없으면 실행하지 않음
+    if (!questions || questions.length === 0) return;
+    
     const preTimer = setTimeout(() => {
-      setIsPreTimerActive(false); // 5초 후에 대기 상태를 해제
-    }, 5000); // 5초 (5000ms)
+      setIsPreTimerActive(false);
+      // 15초 후 모든 타이머를 활성화
+      setTimerStates(prev => {
+        const newStates = { ...prev };
+        Object.keys(newStates).forEach(questionCode => {
+          newStates[questionCode] = {
+            ...newStates[questionCode],
+            isActive: true
+          };
+        });
+        return newStates;
+      });
+    }, 15000); // 15초
 
-    // 컴포넌트가 사라질 때 타이머를 정리합니다.
     return () => clearTimeout(preTimer);
-  }, []); 
+  }, [questions]); // ✅ questions 의존성 추가
 
-  // ✅ [수정] 메인 카운트다운 로직에 대기 상태(isPreTimerActive) 체크 추가
+  // 메인 카운트다운 로직
   useEffect(() => {
-    // 5초 대기 중(isPreTimerActive가 true)이면, 이 로직을 실행하지 않습니다.
     if (isPreTimerActive) return;
 
     const interval = setInterval(() => {
@@ -61,7 +78,7 @@ export default function TimedProblemTemplate({ testData, selectedAnswers, onSele
     }, 1000);
     
     return () => clearInterval(interval);
-  }, [isPreTimerActive]); // isPreTimerActive가 false로 바뀌면 이 useEffect가 실행되어 카운트다운이 시작됩니다.
+  }, [isPreTimerActive]); 
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -96,7 +113,7 @@ export default function TimedProblemTemplate({ testData, selectedAnswers, onSele
       <div className="relative bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/40 p-6 md:p-10 hover:shadow-3xl transition-all duration-500">
         
         <div className="mb-10 text-center">
-            <h2 className="text-2xl font-bold text-slate-800">{testData.test_name || '시간 제한 문제'}</h2>
+            <h2 className="text-2xl font-bold text-slate-800">{(testData.test_name as string) || '시간 제한 문제'}</h2>
             <p className="text-sm text-slate-500 mt-1">제한 시간 안에 문제를 해결해주세요.</p>
         </div>
         
@@ -132,11 +149,9 @@ export default function TimedProblemTemplate({ testData, selectedAnswers, onSele
                 </div>
               </div>
 
-              {/* ✅ [수정] 타이머 UI를 isPreTimerActive 상태에 따라 다르게 렌더링합니다. */}
               <div className="mb-6">
                 <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-xl shadow-sm">
                   {isPreTimerActive ? (
-                    // 5초 대기 시간 동안 보여줄 UI
                     <div className="flex items-center space-x-4">
                       <div className="w-12 h-12 rounded-full flex items-center justify-center bg-sky-500 animate-pulse">
                         <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
@@ -147,7 +162,6 @@ export default function TimedProblemTemplate({ testData, selectedAnswers, onSele
                       </div>
                     </div>
                   ) : (
-                    // 5초 후 보여줄 실제 타이머 UI
                     <>
                       <div className="flex items-center justify-between space-x-4">
                         <div className="flex items-center space-x-4">
@@ -195,7 +209,6 @@ export default function TimedProblemTemplate({ testData, selectedAnswers, onSele
                 </div>
               )}
 
-              {/* 5초 대기 중일 때는 보기를 보여주지 않고, 타이머 완료 후에만 보여줍니다. */}
               {!isPreTimerActive && timerState.isCompleted && (
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-fade-in">
                   {question.choices.map((choice) => (

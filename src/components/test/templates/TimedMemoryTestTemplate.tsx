@@ -36,9 +36,15 @@ export default function TimedMemoryTestTemplate({ testData, selectedAnswers, onS
   // --- 타이머 상태 관리 및 로직 ---
   const [timerStates, setTimerStates] = useState<Record<string, TimerState>>({});
   const [isReady, setIsReady] = useState(false);
+  const [isPreTimerActive, setIsPreTimerActive] = useState(true);
 
+  // 타이머 초기화 로직 - 15초 대기 후 활성화되도록 수정
   useEffect(() => {
-    if (!stableQuestions || stableQuestions.length === 0) { setIsReady(false); setTimerStates({}); return; }
+    if (!stableQuestions || stableQuestions.length === 0) { 
+      setIsReady(false); 
+      setTimerStates({}); 
+      return; 
+    }
     const currentStep = getCurrentStep(stableQuestions);
     const completedTimers = getCompletedTimersFromStorage(currentStep);
     const newTimerStates: Record<string, TimerState> = {};
@@ -51,16 +57,47 @@ export default function TimedMemoryTestTemplate({ testData, selectedAnswers, onS
         if (isAlreadyCompleted) {
           newTimerStates[question.qu_code] = { timeLeft: 0, isActive: false, isCompleted: true, totalTime: timeLimitSec };
         } else {
-          newTimerStates[question.qu_code] = { timeLeft: timeLimitSec, isActive: true, isCompleted: false, totalTime: timeLimitSec };
+          // ✅ 처음에는 비활성화 상태로 설정
+          newTimerStates[question.qu_code] = { timeLeft: timeLimitSec, isActive: false, isCompleted: false, totalTime: timeLimitSec };
         }
       }
     });
     setTimerStates(newTimerStates);
     if (!isReady) setIsReady(true);
+    
+    // ✅ stableQuestions가 변경될 때마다 대기 상태를 다시 활성화
+    setIsPreTimerActive(true);
   }, [stableQuestions, isReady]);
 
+  // ✅ stableQuestions가 변경될 때마다 15초 대기 후 타이머 활성화
   useEffect(() => {
-    if (!isReady) return;
+    // stableQuestions가 없으면 실행하지 않음
+    if (!stableQuestions || stableQuestions.length === 0) return;
+    
+    const preTimer = setTimeout(() => {
+      setIsPreTimerActive(false);
+      // 15초 후 모든 타이머를 활성화
+      setTimerStates(prev => {
+        const newStates = { ...prev };
+        Object.keys(newStates).forEach(questionCode => {
+          const state = newStates[questionCode];
+          if (state && !state.isCompleted) {
+            newStates[questionCode] = {
+              ...state,
+              isActive: true
+            };
+          }
+        });
+        return newStates;
+      });
+    }, 15000); // 15초
+
+    return () => clearTimeout(preTimer);
+  }, [stableQuestions]); // ✅ stableQuestions 의존성 추가
+
+  // 메인 카운트다운 로직
+  useEffect(() => {
+    if (!isReady || isPreTimerActive) return;
     const intervalId = setInterval(() => {
       setTimerStates(prevStates => {
         const newStates = { ...prevStates };
@@ -82,10 +119,10 @@ export default function TimedMemoryTestTemplate({ testData, selectedAnswers, onS
       });
     }, 1000);
     return () => clearInterval(intervalId);
-  }, [isReady, stableQuestions]);
+  }, [isReady, stableQuestions, isPreTimerActive]);
 
   useEffect(() => {
-    if (process.env.NODE_ENV === 'development' && isReady) {
+    if (process.env.NODE_ENV === 'development' && isReady && !isPreTimerActive) {
       const timer = setTimeout(() => {
         stableQuestions.forEach((question) => {
           if (selectedAnswers[question.qu_code]) return;
@@ -100,7 +137,7 @@ export default function TimedMemoryTestTemplate({ testData, selectedAnswers, onS
       }, 1500);
       return () => clearTimeout(timer);
     }
-  }, [stableQuestions, selectedAnswers, onSelectChoice, timerStates, isReady]);
+  }, [stableQuestions, selectedAnswers, onSelectChoice, timerStates, isReady, isPreTimerActive]);
 
   // --- 개발 모드 함수들 ---
   const handleManualAutoSelect = () => {
@@ -197,11 +234,26 @@ export default function TimedMemoryTestTemplate({ testData, selectedAnswers, onS
                     </div>
                     {hasTimer && (
                       <div className="flex items-center space-x-3">
-                        {isTimerActive && <CircularProgress progress={getTimerProgress(timerState)} size={50} />}
-                        <div className="text-center">
-                          <div className={`text-lg font-bold ${isTimerActive ? 'text-red-100' : 'text-white'}`}>{formatTime(timerState.timeLeft)}</div>
-                          <div className="text-xs text-red-100">{isTimerActive ? '기억 시간' : '시간 종료'}</div>
-                        </div>
+                        {/* ✅ 15초 대기 중일 때 표시 */}
+                        {isPreTimerActive ? (
+                          <div className="flex items-center space-x-3">
+                            <div className="w-12 h-12 rounded-full flex items-center justify-center bg-sky-500 animate-pulse">
+                              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                            </div>
+                            <div className="text-center">
+                              <div className="text-lg font-bold text-white">잠시 후 시작</div>
+                              <div className="text-xs text-red-100">내용을 미리 확인하세요</div>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            {isTimerActive && <CircularProgress progress={getTimerProgress(timerState)} size={50} />}
+                            <div className="text-center">
+                              <div className={`text-lg font-bold ${isTimerActive ? 'text-red-100' : 'text-white'}`}>{formatTime(timerState.timeLeft)}</div>
+                              <div className="text-xs text-red-100">{isTimerActive ? '기억 시간' : '시간 종료'}</div>
+                            </div>
+                          </>
+                        )}
                       </div>
                     )}
                   </div>
@@ -218,7 +270,7 @@ export default function TimedMemoryTestTemplate({ testData, selectedAnswers, onS
                           <div className="flex"><svg className="w-5 h-5 text-red-500 mr-2 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg><p className="text-red-700 font-medium leading-relaxed">{question.qu_instruction}</p></div>
                         </div>
                       )}
-                      {imageCount > 0 && (
+                      {imageCount > 0 && question.qu_images && (
                         <div className="mb-8"><div className={`${layoutConfig.maxWidth} mx-auto`}><div className={`grid ${layoutConfig.gridCols} gap-4`}>{question.qu_images.map((img, i) => (<div key={i} className="relative group/image w-full p-2 bg-white rounded-xl shadow-md"><div className={`w-full ${layoutConfig.imageHeight} flex items-center justify-center bg-slate-50 rounded-lg overflow-hidden`}><img src={img} alt={`문제 이미지 ${i + 1}`} className="max-w-full max-h-full object-contain" /></div></div>))}</div></div></div>
                       )}
                       {question.qu_passage && (

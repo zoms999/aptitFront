@@ -10,6 +10,8 @@ import {
   DevControls 
 } from './utils';
 
+const PRE_TIMER_DELAY_MS = 15000; // 15초
+
 export default function PureTextQuestionTemplate({ testData, selectedAnswers, onSelectChoice }: TemplateProps) {
   const questions = testData.questions;
   
@@ -21,10 +23,8 @@ export default function PureTextQuestionTemplate({ testData, selectedAnswers, on
   // 타이머 상태 관리
   const [timerStates, setTimerStates] = useState<Record<string, TimerState>>({});
   const [isReady, setIsReady] = useState(false);
-  // ✅ [삭제] visibleLineCount 상태 변수를 제거했습니다.
-  // const [visibleLineCount, setVisibleLineCount] = useState(1);
 
-  // --- 타이머 관련 로직 ---
+  // --- 타이머 관련 로직 (15초 지연 포함) ---
   useEffect(() => {
     if (!stableQuestions || stableQuestions.length === 0) {
       setIsReady(false);
@@ -42,7 +42,7 @@ export default function PureTextQuestionTemplate({ testData, selectedAnswers, on
         const isAlreadyCompleted = completedTimers[question.qu_code] === true;
         newTimerStates[question.qu_code] = {
           timeLeft: isAlreadyCompleted ? 0 : timeLimitSec,
-          isActive: !isAlreadyCompleted,
+          isActive: false, 
           isCompleted: isAlreadyCompleted,
           totalTime: timeLimitSec,
         };
@@ -51,6 +51,28 @@ export default function PureTextQuestionTemplate({ testData, selectedAnswers, on
     setTimerStates(newTimerStates);
     if (!isReady) setIsReady(true);
   }, [stableQuestions, isReady]);
+  
+  useEffect(() => {
+    if (!isReady) return;
+    const pendingTimerCodes = Object.keys(timerStates).filter(
+      (code) => timerStates[code] && !timerStates[code].isActive && !timerStates[code].isCompleted
+    );
+    if (pendingTimerCodes.length === 0) return;
+
+    const delayTimeoutId = setTimeout(() => {
+      setTimerStates((prevStates) => {
+        const newStates = { ...prevStates };
+        pendingTimerCodes.forEach(code => {
+          if (newStates[code]) {
+            newStates[code].isActive = true;
+          }
+        });
+        return newStates;
+      });
+    }, PRE_TIMER_DELAY_MS);
+
+    return () => clearTimeout(delayTimeoutId);
+  }, [isReady, timerStates]);
 
   useEffect(() => {
     if (!isReady) return;
@@ -76,8 +98,6 @@ export default function PureTextQuestionTemplate({ testData, selectedAnswers, on
     }, 1000);
     return () => clearInterval(intervalId);
   }, [isReady, stableQuestions]);
-
-  // ✅ [삭제] thk05010 지문 순차 공개 로직을 담고 있던 useEffect를 완전히 제거했습니다.
 
   // --- 개발 환경 관련 로직 (기존과 동일) ---
   useEffect(() => {
@@ -128,9 +148,10 @@ export default function PureTextQuestionTemplate({ testData, selectedAnswers, on
         {stableQuestions.map((question, questionIndex) => {
           const timerState = timerStates[question.qu_code];
           const hasTimeLimit = timerState !== undefined;
-          const timerIsActive = hasTimeLimit && timerState?.isActive;
-          const timerIsCompleted = hasTimeLimit && timerState?.isCompleted;
-          const showChoices = !hasTimeLimit || timerIsCompleted;
+          const isTimerActive = hasTimeLimit && timerState?.isActive;
+          const isTimerCompleted = hasTimeLimit && timerState?.isCompleted;
+          const isDelayPhase = hasTimeLimit && !isTimerActive && !isTimerCompleted;
+          const showChoices = !hasTimeLimit || isTimerCompleted;
 
           return (
             <div key={question.qu_code} className={`transition-opacity duration-300 ${questionIndex > 0 ? 'border-t border-gray-100 pt-10 mt-10' : ''}`}>
@@ -154,7 +175,7 @@ export default function PureTextQuestionTemplate({ testData, selectedAnswers, on
                 )}
 
                 {question.qu_passage && question.qu_passage.trim() !== '' && (
-                  (hasTimeLimit && timerIsCompleted) ? (
+                  (hasTimeLimit && isTimerCompleted) ? (
                     <div className="px-5 py-4 bg-gray-100 rounded-lg border-l-4 border-gray-400">
                       <div className="flex items-center">
                         <svg className="w-5 h-5 text-gray-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -170,7 +191,6 @@ export default function PureTextQuestionTemplate({ testData, selectedAnswers, on
                         <span className="text-blue-800 font-bold text-sm">지문</span>
                       </div>
                       <div className="text-slate-700 text-base leading-relaxed space-y-2">
-                         {/* ✅ [수정] thk05010 조건부 렌더링을 제거하고 일반 로직으로 통합했습니다. */}
                          {question.qu_passage.split('\n').map((line, index) => (
                            <p key={index}>{line || '\u00A0'}</p>
                          ))}
@@ -189,13 +209,25 @@ export default function PureTextQuestionTemplate({ testData, selectedAnswers, on
                   </div>
                 )}
                 
-                {hasTimeLimit && (
+                {isDelayPhase ? (
+                  <div className={`mt-4 p-5 rounded-2xl border shadow-lg transition-all duration-300 bg-gradient-to-r from-gray-50 to-gray-100 border-gray-200/50`}>
+                     <div className="flex items-center justify-center space-x-4">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <div className="text-center">
+                          <div className="text-gray-700 font-medium">잠시 후 타이머가 시작됩니다.</div>
+                          <div className="text-gray-500 text-sm mt-1">지문을 미리 읽어보세요.</div>
+                        </div>
+                      </div>
+                  </div>
+                ) : hasTimeLimit && (
                   <div className={`mt-4 p-5 rounded-2xl border shadow-lg transition-all duration-300
-                    ${timerIsActive 
+                    ${isTimerActive
                       ? 'bg-gradient-to-r from-red-50 to-orange-50 border-red-200/50' 
                       : 'bg-gradient-to-r from-green-50 to-emerald-50 border-green-200/50'}`
                   }>
-                    {timerIsActive ? (
+                    {isTimerActive ? (
                       <div className="flex items-center justify-center space-x-6">
                         <div className="relative"><CircularProgress progress={getTimerProgress(timerState)} /></div>
                         <div className="text-center">
@@ -226,13 +258,16 @@ export default function PureTextQuestionTemplate({ testData, selectedAnswers, on
                         <div className={`absolute -inset-0.5 rounded-xl blur opacity-0 group-hover/choice:opacity-60 transition ${selectedAnswers[question.qu_code] === choice.an_val ? 'bg-gradient-to-r from-indigo-500 to-purple-600 opacity-75' : 'bg-gradient-to-r from-indigo-400 to-purple-500'}`}></div>
                         <button 
                           onClick={() => onSelectChoice(question.qu_code, choice.an_val, choice.an_wei)} 
-                          className={`relative w-full h-full px-4 py-3 text-left rounded-xl font-semibold transition-all hover:scale-105 hover:-translate-y-1 ${selectedAnswers[question.qu_code] === choice.an_val ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-xl scale-105 -translate-y-1' : 'bg-white/90 border border-gray-200/60 text-gray-700 hover:bg-white'}`}
+                          // ✅ [수정] 버튼 패딩 조정
+                          className={`relative w-full h-full px-4 py-4 text-left rounded-xl font-semibold transition-all hover:scale-105 hover:-translate-y-1 ${selectedAnswers[question.qu_code] === choice.an_val ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-xl scale-105 -translate-y-1' : 'bg-white/90 border border-gray-200/60 text-gray-700 hover:bg-white'}`}
                         >
                           <div className="flex flex-row items-center">
-                            <div className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs flex-shrink-0 transition mr-3 ${selectedAnswers[question.qu_code] === choice.an_val ? 'bg-white text-indigo-600' : 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white'}`}>
+                            {/* ✅ [수정] 아이콘-텍스트 간격 조정 */}
+                            <div className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs flex-shrink-0 transition mr-4 ${selectedAnswers[question.qu_code] === choice.an_val ? 'bg-white text-indigo-600' : 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white'}`}>
                               {choice.an_val}
                             </div>
-                            <span className="text-sm font-medium">{choice.an_text}</span>
+                            {/* ✅ [수정] 보기 폰트 크기 변경 (sm -> base) */}
+                            <span className="text-base font-medium">{choice.an_text}</span>
                           </div>
                         </button>
                       </div>

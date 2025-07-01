@@ -18,6 +18,7 @@ export default function SimpleImageChoiceTemplate({ testData, selectedAnswers, o
   // --- 범용 타이머 상태 관리 ---
   const [timerStates, setTimerStates] = useState<Record<string, TimerState>>({});
   const [isReady, setIsReady] = useState(false);
+  const [isPreTimerActive, setIsPreTimerActive] = useState(true);
 
   // 타이머 초기화 로직
   useEffect(() => {
@@ -38,17 +39,57 @@ export default function SimpleImageChoiceTemplate({ testData, selectedAnswers, o
         if (isAlreadyCompleted) {
           newTimerStates[question.qu_code] = { timeLeft: 0, isActive: false, isCompleted: true, totalTime: timeLimitSec };
         } else {
-          newTimerStates[question.qu_code] = { timeLeft: timeLimitSec, isActive: true, isCompleted: false, totalTime: timeLimitSec };
+          // ✅ 처음에는 비활성화 상태로 설정
+          newTimerStates[question.qu_code] = { timeLeft: timeLimitSec, isActive: false, isCompleted: false, totalTime: timeLimitSec };
         }
       }
     });
     setTimerStates(newTimerStates);
     if (!isReady) setIsReady(true);
+    
+    console.log('[SimpleImageChoice] 타이머 상태 초기화:', newTimerStates);
+    
+    // ✅ stableQuestions가 변경될 때마다 대기 상태를 다시 활성화
+    setIsPreTimerActive(true);
+    console.log('[SimpleImageChoice] 대기 상태 활성화됨');
   }, [stableQuestions, isReady]);
+
+  // ✅ stableQuestions가 변경될 때마다 15초 대기 후 타이머 활성화
+  useEffect(() => {
+    // stableQuestions가 없으면 실행하지 않음
+    if (!stableQuestions || stableQuestions.length === 0) return;
+    
+    console.log('[SimpleImageChoice] 15초 대기 시작, stableQuestions:', stableQuestions.length);
+    
+    const preTimer = setTimeout(() => {
+      console.log('[SimpleImageChoice] 15초 완료, 타이머 활성화 시작');
+      setIsPreTimerActive(false);
+      // 15초 후 모든 타이머를 활성화
+      setTimerStates(prev => {
+        const newStates = { ...prev };
+        Object.keys(newStates).forEach(questionCode => {
+          const state = newStates[questionCode];
+          if (state && !state.isCompleted) {
+            console.log(`[SimpleImageChoice] 타이머 활성화: ${questionCode}`);
+            newStates[questionCode] = {
+              ...state,
+              isActive: true
+            };
+          }
+        });
+        return newStates;
+      });
+    }, 15000); // 15초
+
+    return () => {
+      console.log('[SimpleImageChoice] 타이머 정리');
+      clearTimeout(preTimer);
+    };
+  }, [stableQuestions]); // ✅ stableQuestions 의존성 추가
 
   // 타이머 카운트다운 로직
   useEffect(() => {
-    if (!isReady) return;
+    if (!isReady || isPreTimerActive) return;
     const intervalId = setInterval(() => {
       setTimerStates(prevStates => {
         const newStates = { ...prevStates };
@@ -70,7 +111,7 @@ export default function SimpleImageChoiceTemplate({ testData, selectedAnswers, o
       });
     }, 1000);
     return () => clearInterval(intervalId);
-  }, [isReady, stableQuestions]);
+  }, [isReady, stableQuestions, isPreTimerActive]); // ✅ isPreTimerActive 의존성 추가
 
   // 개발용 타이머 스킵 함수
   const handleSkipTimer = (questionCode: string) => {
@@ -160,31 +201,45 @@ export default function SimpleImageChoiceTemplate({ testData, selectedAnswers, o
               {hasTimeLimit && !showChoices && (
                 <div className="mb-6">
                   <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-xl shadow-sm">
-                    <div className="flex items-center justify-between space-x-4">
+                    {isPreTimerActive ? (
                       <div className="flex items-center space-x-4">
-                        <div className={`w-12 h-12 rounded-full flex items-center justify-center ${timerState.isActive ? 'bg-green-500 animate-pulse' : 'bg-gray-500'}`}>
+                        <div className="w-12 h-12 rounded-full flex items-center justify-center bg-sky-500 animate-pulse">
                           <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                         </div>
                         <div>
-                          <div className={`text-2xl font-bold ${timerState.timeLeft <= 5 ? 'text-red-600' : 'text-gray-700'}`}>
-                            {formatTime(timerState.timeLeft)}
-                          </div>
-                          <div className="text-sm text-gray-600">
-                            {timerState.isActive ? '제한 시간' : '시간 종료 - 답을 선택하세요'}
-                          </div>
+                          <div className="text-lg font-bold text-sky-700">잠시 후 시작합니다</div>
+                          <div className="text-sm text-gray-600">문제 내용을 미리 확인하세요.</div>
                         </div>
                       </div>
-                      {process.env.NODE_ENV === 'development' && timerState.isActive && (
-                        <button onClick={() => handleSkipTimer(question.qu_code)} className="px-3 py-1 bg-sky-500 text-white text-xs font-bold rounded-full shadow hover:bg-sky-600 transition-all transform hover:scale-105" title="개발용: 타이머를 즉시 종료합니다.">
-                          스킵
-                        </button>
-                      )}
-                    </div>
-                    <div className="mt-4">
-                      <div className="w-full bg-gray-200 rounded-full h-2.5">
-                        <div className={`h-2.5 rounded-full transition-all duration-1000 ease-linear ${timerState.timeLeft <= 5 ? 'bg-red-500' : 'bg-green-500'}`} style={{ width: `${(timerState.timeLeft / timerState.totalTime) * 100}%` }}></div>
+                    ) : (
+                      <div className="flex items-center justify-between space-x-4">
+                        <div className="flex items-center space-x-4">
+                          <div className={`w-12 h-12 rounded-full flex items-center justify-center ${timerState.isActive ? 'bg-green-500 animate-pulse' : 'bg-gray-500'}`}>
+                            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                          </div>
+                          <div>
+                            <div className={`text-2xl font-bold ${timerState.timeLeft <= 5 ? 'text-red-600' : 'text-gray-700'}`}>
+                              {formatTime(timerState.timeLeft)}
+                            </div>
+                            <div className="text-sm text-gray-600">
+                              {timerState.isActive ? '제한 시간' : '시간 종료 - 답을 선택하세요'}
+                            </div>
+                          </div>
+                        </div>
+                        {process.env.NODE_ENV === 'development' && timerState.isActive && (
+                          <button onClick={() => handleSkipTimer(question.qu_code)} className="px-3 py-1 bg-sky-500 text-white text-xs font-bold rounded-full shadow hover:bg-sky-600 transition-all transform hover:scale-105" title="개발용: 타이머를 즉시 종료합니다.">
+                            스킵
+                          </button>
+                        )}
                       </div>
-                    </div>
+                    )}
+                    {!isPreTimerActive && (
+                      <div className="mt-4">
+                        <div className="w-full bg-gray-200 rounded-full h-2.5">
+                          <div className={`h-2.5 rounded-full transition-all duration-1000 ease-linear ${timerState.timeLeft <= 5 ? 'bg-red-500' : 'bg-green-500'}`} style={{ width: `${(timerState.timeLeft / timerState.totalTime) * 100}%` }}></div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
