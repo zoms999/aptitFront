@@ -12,6 +12,15 @@ import ThinkingTest from '@/components/test/ThinkingTest';
 import PreferenceTest from '@/components/test/PreferenceTest';
 import TestCompletionModal from '@/components/test/TestCompletionModal';
 import TestNavButton from '@/components/test/TestNavButton';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface TestStartPageProps {
   params: Promise<{
@@ -68,6 +77,8 @@ export default function TestStartPage({ params }: TestStartPageProps) {
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, number>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentImageNumber, setCurrentImageNumber] = useState<number>(2);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogContent, setDialogContent] = useState({ title: '', description: '' });
   
   // params를 unwrap
   const resolvedParams = use(params);
@@ -352,6 +363,11 @@ export default function TestStartPage({ params }: TestStartPageProps) {
   };
 
   // 다음 문항으로 이동하는 핸들러
+  const showDialog = (title: string, description: string) => {
+    setDialogContent({ title, description });
+    setDialogOpen(true);
+  };
+
   const handleNextQuestion = async () => {
     if (isSubmitting || !testData) return;
     
@@ -381,7 +397,7 @@ export default function TestStartPage({ params }: TestStartPageProps) {
       // 일반적인 답변 저장 및 다음 문항 이동
       const selectedAnswersList = Object.entries(selectedAnswers);
       if (selectedAnswersList.length === 0) {
-        alert('답변을 선택해주세요.');
+        showDialog('알림', '답변을 선택해주세요.');
         setIsSubmitting(false);
         return;
       }
@@ -482,7 +498,7 @@ export default function TestStartPage({ params }: TestStartPageProps) {
       }
     } catch (err) {
       console.error('답변 저장 오류:', err);
-      alert(err instanceof Error ? err.message : '오류가 발생했습니다');
+      showDialog('오류', err instanceof Error ? err.message : '오류가 발생했습니다');
     } finally {
       setIsSubmitting(false);
     }
@@ -676,6 +692,19 @@ export default function TestStartPage({ params }: TestStartPageProps) {
           )}
         </div>
       </div>
+      <AlertDialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{dialogContent.title}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {dialogContent.description}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => setDialogOpen(false)}>확인</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
