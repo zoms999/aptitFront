@@ -42,6 +42,7 @@ interface TestStatus {
   testCount: number;
   completedCount: number;
   latestTestStatus: string;
+  latestCrSeq: string | null;
 }
 
 interface Member {
@@ -51,6 +52,7 @@ interface Member {
   pe_sex: string;
   pe_cellphone: string;
   join_date: string;
+  ac_id: string | null;
   testStatus?: TestStatus;
 }
 
@@ -191,7 +193,6 @@ export default function OrganizationDashboard() {
   const { accountStatus, tests, instituteInfo, members, isOrganizationAdmin } = dashboardData;
   
   // 계정 상태에 따른 표시 정보
-  const isPaid = accountStatus.cr_pay === 'Y';
   const isExpired = accountStatus.expire === 'N';
   const expireDate = tests.length > 0 ? tests[0].expiredate : '만료일 없음';
 
@@ -395,6 +396,7 @@ export default function OrganizationDashboard() {
                     <thead className="bg-gradient-to-r from-gray-50/90 to-gray-100/90 backdrop-blur-sm">
                       <tr>
                         <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">이름</th>
+                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">아이디</th>
                         <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">이메일</th>
                         <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">성별</th>
                         <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">연락처</th>
@@ -406,6 +408,7 @@ export default function OrganizationDashboard() {
                       {members.map((member, index) => (
                         <tr key={member.pe_seq} className={`${index % 2 === 0 ? 'bg-white/60' : 'bg-gray-50/60'} hover:bg-blue-50/60 transition-all duration-200 hover:shadow-sm`}>
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">{member.pe_name}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{member.ac_id || '계정없음'}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{member.pe_email}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                             <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold shadow-sm ${
@@ -419,7 +422,7 @@ export default function OrganizationDashboard() {
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{member.join_date}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                             {member.testStatus ? (
-                              <div className="flex flex-col space-y-1">
+                              <div className="flex flex-col space-y-2">
                                 <div className="flex items-center space-x-2">
                                   <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-bold shadow-sm ${
                                     member.testStatus.hasTest 
@@ -436,16 +439,29 @@ export default function OrganizationDashboard() {
                                   </div>
                                 )}
                                 {member.testStatus.latestTestStatus !== 'none' && (
-                                  <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-bold shadow-sm ${
-                                    member.testStatus.latestTestStatus === 'E' 
-                                      ? 'bg-gradient-to-r from-blue-100 to-blue-200 text-blue-800'
-                                      : member.testStatus.latestTestStatus === 'I'
-                                      ? 'bg-gradient-to-r from-yellow-100 to-yellow-200 text-yellow-800'
-                                      : 'bg-gradient-to-r from-gray-100 to-gray-200 text-gray-800'
-                                  }`}>
-                                    {member.testStatus.latestTestStatus === 'E' ? '완료' : 
-                                     member.testStatus.latestTestStatus === 'I' ? '진행중' : '준비'}
-                                  </span>
+                                  <div className="flex items-center space-x-2">
+                                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-bold shadow-sm ${
+                                      member.testStatus.latestTestStatus === 'E' 
+                                        ? 'bg-gradient-to-r from-blue-100 to-blue-200 text-blue-800'
+                                        : member.testStatus.latestTestStatus === 'I'
+                                        ? 'bg-gradient-to-r from-yellow-100 to-yellow-200 text-yellow-800'
+                                        : 'bg-gradient-to-r from-gray-100 to-gray-200 text-gray-800'
+                                    }`}>
+                                      {member.testStatus.latestTestStatus === 'E' ? '완료' : 
+                                       member.testStatus.latestTestStatus === 'I' ? '진행중' : '준비'}
+                                    </span>
+                                    {member.testStatus.latestTestStatus === 'E' && member.testStatus.latestCrSeq && (
+                                      <button
+                                        onClick={() => router.push(`/test-result/${member.testStatus!.latestCrSeq}`)}
+                                        className="inline-flex items-center px-3 py-1 bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-xs font-bold rounded-lg hover:from-indigo-600 hover:to-purple-700 transition-all duration-200 shadow-sm hover:shadow-md transform hover:scale-105"
+                                      >
+                                        <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                        </svg>
+                                        결과보기
+                                      </button>
+                                    )}
+                                  </div>
                                 )}
                               </div>
                             ) : (

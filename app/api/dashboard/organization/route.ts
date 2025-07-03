@@ -160,12 +160,14 @@ export async function GET() {
         pe_cellphone: string;
         join_date: string;
         ac_gid: string | null;
+        ac_id: string | null;
       }
       
       interface TestStatusRecord {
         total_tests: string;
         completed_tests: string;
         latest_status: string;
+        latest_cr_seq: string;
       }
       
       let membersResult: MemberRecord[] = [];
@@ -178,7 +180,7 @@ export async function GET() {
         membersResult = await prisma.$queryRaw`
           SELECT pe.pe_seq, pe.pe_name, pe.pe_email, pe.pe_sex, pe.pe_cellphone,
                 TO_CHAR(im.mem_insert_date, 'yyyy-mm-dd') AS join_date,
-                ac.ac_gid
+                ac.ac_gid, ac.ac_id
           FROM mwd_institute ins
           JOIN mwd_institute_turn tur ON ins.ins_seq = tur.ins_seq
           JOIN mwd_institute_member im ON tur.ins_seq = im.ins_seq AND tur.tur_seq = im.tur_seq
@@ -192,11 +194,11 @@ export async function GET() {
         // 각 회원의 검사 상태 조회
         if (Array.isArray(membersResult) && membersResult.length > 0) {
           for (const member of membersResult) {
-            let testStatus = { hasTest: false, testCount: 0, completedCount: 0, latestTestStatus: 'none' };
-        
+            let testStatus = { hasTest: false, testCount: 0, completedCount: 0, latestTestStatus: 'none', latestCrSeq: null as string | null };
+            
             if (member?.ac_gid) {
               // [수정] 1. 검사 요약 정보 조회 (총 개수, 완료 개수)
-              const summaryResult = await prisma.$queryRaw<any[]>`
+              const summaryResult = await prisma.$queryRaw<TestStatusRecord[]>`
                 SELECT 
                     COUNT(*) AS total_tests,
                     SUM(CASE WHEN COALESCE(ap.anp_done, 'R') = 'E' THEN 1 ELSE 0 END) AS completed_tests
@@ -204,10 +206,10 @@ export async function GET() {
                 LEFT JOIN mwd_answer_progress ap ON ap.cr_seq = cr.cr_seq
                 WHERE cr.ac_gid = ${member.ac_gid}::uuid
               `;
-        
-              // [수정] 2. 가장 최근 검사 상태 조회
-              const latestStatusResult = await prisma.$queryRaw<any[]>`
-                SELECT COALESCE(ap.anp_done, 'R') as latest_status
+          
+              // [수정] 2. 가장 최근 검사 상태 및 cr_seq 조회
+              const latestStatusResult = await prisma.$queryRaw<TestStatusRecord[]>`
+                SELECT COALESCE(ap.anp_done, 'R') as latest_status, cr.cr_seq as latest_cr_seq
                 FROM mwd_choice_result cr
                 LEFT JOIN mwd_answer_progress ap ON ap.cr_seq = cr.cr_seq
                 WHERE cr.ac_gid = ${member.ac_gid}::uuid
@@ -217,17 +219,18 @@ export async function GET() {
               
               const summaryData = summaryResult?.[0];
               const latestStatusData = latestStatusResult?.[0];
-        
+          
               if (summaryData && parseInt(summaryData.total_tests) > 0) {
                 testStatus = {
                   hasTest: true,
                   testCount: parseInt(summaryData.total_tests),
-                  completedCount: parseInt(summaryData.completed_tests || 0),
-                  latestTestStatus: latestStatusData?.latest_status || 'none'
+                  completedCount: parseInt(summaryData.completed_tests || '0'),
+                  latestTestStatus: latestStatusData?.latest_status || 'none',
+                  latestCrSeq: latestStatusData?.latest_cr_seq || null
                 };
               }
             }
-        
+            
             membersWithTestStatus.push({
               ...member,
               testStatus
