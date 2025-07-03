@@ -17,15 +17,17 @@ export async function GET() {
     
     let ac_gid;
     let ins_seq = -1;
+    let userType;
     
     // session.user에서 사용자 정보 확인
     console.log('대시보드 라우팅 - 사용자 상세 정보:', JSON.stringify(session.user, null, 2));
-    const userAny = session.user as any;
+    const userAny = session.user as { id?: string; ac_id?: string; type?: string };
     
     // 세션에 필수 필드 검증
     if (userAny.id && userAny.ac_id) {
       ac_gid = userAny.id;
-      console.log('대시보드 라우팅 - ac_gid 확인:', ac_gid);
+      userType = userAny.type;
+      console.log('대시보드 라우팅 - ac_gid 확인:', ac_gid, 'userType:', userType);
       
       // 기관 여부 검증
       try {
@@ -55,254 +57,28 @@ export async function GET() {
       }, { status: 401 });
     }
     
-    console.log('대시보드 라우팅 - 사용자 정보 확인 완료:', { ac_gid, ins_seq });
+    console.log('대시보드 라우팅 - 사용자 정보 확인 완료:', { ac_gid, ins_seq, userType });
     
-    // 기관 계정 여부에 따라 적절한 API 호출 및 데이터 반환
-    if (ins_seq !== -1) {
-      // 기관 회원인 경우 - 직접 기관 대시보드 로직 호출
-      console.log('기관 회원 대시보드로 라우팅');
+    // 사용자 타입에 따라 적절한 대시보드로 라우팅
+    if (userType === 'organization_admin' || userType === 'organization_member') {
+      // 기관 계정인 경우 - 기관 대시보드로 라우팅
+      console.log('기관 대시보드로 라우팅 (타입:', userType, ')');
       
-      // 기관 정보 조회
-      const instituteResult = await prisma.$queryRaw`
-        SELECT ins.ins_seq, ins.ins_name, tur.tur_seq, tur.tur_code,
-              tur.tur_req_sum, tur.tur_use_sum
-        FROM mwd_account ac
-        JOIN mwd_institute ins ON ac.ins_seq = ins.ins_seq
-        JOIN mwd_institute_turn tur ON ins.ins_seq = tur.ins_seq
-        WHERE ac.ac_gid = ${ac_gid}::uuid
-        AND tur.tur_use = 'Y'
-      `;
-      
-      // 1. 계정 상태 조회
-      const accountStatusResult = await prisma.$queryRaw`
-        SELECT cr_pay, pd_kind, expire, state 
-        FROM (
-          SELECT ac.ac_gid, 
-              row_number() OVER (ORDER BY cr.cr_seq DESC) rnum,
-              COALESCE(cr.cr_pay, 'N') cr_pay, 
-              COALESCE(cr.pd_kind, '') pd_kind,
-              CASE 
-                  WHEN ac.ac_expire_date >= now() THEN 'Y' 
-                  ELSE 'N' 
-              END expire,
-              COALESCE(ap.anp_done, 'R') state
-          FROM mwd_person pe, mwd_account ac
-          LEFT JOIN mwd_choice_result cr ON cr.ac_gid = ac.ac_gid
-          LEFT JOIN mwd_answer_progress ap ON ap.cr_seq = cr.cr_seq
-          WHERE ac.ac_gid = ${ac_gid}::uuid
-            AND pe.pe_seq = ac.pe_seq 
-            AND ac.ac_use = 'Y'
-        ) t 
-        WHERE rnum = 1
-      `;
-      
-      // 2. 검사 목록 조회
-      const testsResult = await prisma.$queryRaw`
-        SELECT row_number() OVER (ORDER BY cr.cr_seq DESC) AS num, 
-              cr.cr_seq, 
-              cr.cr_pay, 
-              pr.pd_name,
-              COALESCE(ap.anp_seq, -1) AS anp_seq, 
-              COALESCE(TO_CHAR(ap.anp_start_date, 'yyyy-mm-dd hh24:mi:ss'), '') AS startdate,
-              COALESCE(TO_CHAR(ap.anp_end_date, 'yyyy-mm-dd'), '') AS enddate,
-              COALESCE(ap.anp_done, 'R') AS done,
-              CASE 
-                  WHEN cr.pd_kind = 'basic' 
-                      AND ac.ac_expire_date >= now() 
-                      AND COALESCE(ap.anp_done, '') = 'E' THEN 'Y'
-                  WHEN cr.pd_kind = 'basic' 
-                      AND ac.ac_expire_date <= now() THEN 'E'
-                  WHEN cr.pd_kind LIKE 'premium%' 
-                      AND COALESCE(ap.anp_done, '') = 'E' THEN 'P'
-                  ELSE 'N'
-              END AS rview,
-              TO_CHAR(ac.ac_expire_date, 'yyyy-mm-dd') AS expiredate
-        FROM mwd_product pr, mwd_account ac, mwd_choice_result cr
-        LEFT JOIN mwd_answer_progress ap ON ap.cr_seq = cr.cr_seq
-        WHERE ac.ac_gid = ${ac_gid}::uuid
-          AND cr.ac_gid = ac.ac_gid 
-          AND pr.pd_num = cr.pd_num
-      `;
-      
-      // 3. 기관 회원 목록 조회
-      const membersResult = await prisma.$queryRaw`
-        SELECT pe.pe_seq, pe.pe_name, pe.pe_email, pe.pe_sex, pe.pe_cellphone,
-              TO_CHAR(im.mem_insert_date, 'yyyy-mm-dd') AS join_date
-        FROM mwd_account ac
-        JOIN mwd_institute ins ON ac.ins_seq = ins.ins_seq
-        JOIN mwd_institute_turn tur ON ins.ins_seq = tur.ins_seq
-        JOIN mwd_institute_member im ON tur.ins_seq = im.ins_seq AND tur.tur_seq = im.tur_seq
-        JOIN mwd_person pe ON im.pe_seq = pe.pe_seq
-        WHERE ac.ac_gid = ${ac_gid}::uuid
-        AND tur.tur_use = 'Y'
-        ORDER BY im.mem_insert_date DESC
-      `;
-      
-      // 4. 완료된 검사 수 계산
-      const completedTests = Array.isArray(testsResult) 
-        ? testsResult.filter(test => test.done === 'E').length 
-        : 0;
-      
-      // BigInt 값을 문자열로 변환하는 함수
-      const convertBigIntToString = (obj: unknown): unknown => {
-        if (obj === null || obj === undefined) return obj;
-        
-        if (typeof obj === 'bigint') {
-          return obj.toString();
-        }
-        
-        if (Array.isArray(obj)) {
-          return obj.map(item => convertBigIntToString(item));
-        }
-        
-        if (typeof obj === 'object') {
-          const result: Record<string, unknown> = {};
-          for (const key in obj) {
-            result[key] = convertBigIntToString((obj as Record<string, unknown>)[key]);
-          }
-          return result;
-        }
-        
-        return obj;
-      };
-      
-      // 결과 처리
-      const safeAccountStatus = Array.isArray(accountStatusResult) && accountStatusResult.length > 0 
-        ? convertBigIntToString(accountStatusResult[0])
-        : { cr_pay: 'N', pd_kind: '', expire: 'N', state: 'R' };
-        
-      const safeTests = Array.isArray(testsResult) 
-        ? convertBigIntToString(testsResult)
-        : [];
-        
-      const safeInstituteInfo = Array.isArray(instituteResult) && instituteResult.length > 0
-        ? convertBigIntToString(instituteResult[0])
-        : null;
-        
-      const safeMembers = Array.isArray(membersResult)
-        ? convertBigIntToString(membersResult)
-        : [];
-      
+      // 기관 대시보드 API로 내부 리다이렉트
       return NextResponse.json({
-        accountStatus: safeAccountStatus,
-        tests: safeTests,
-        completedTests,
-        instituteInfo: safeInstituteInfo,
-        members: safeMembers,
+        redirect: '/api/dashboard/organization',
+        userType: userType,
         isOrganization: true
       });
       
     } else {
-      // 일반 회원인 경우 - 직접 개인 대시보드 로직 호출
-      console.log('일반 회원 대시보드로 라우팅');
+      // 일반 회원인 경우 - 개인 대시보드로 라우팅
+      console.log('개인 대시보드로 라우팅');
       
-      // 1. 계정 상태 조회
-      const accountStatusResult = await prisma.$queryRaw`
-        SELECT cr_pay, pd_kind, expire, state 
-        FROM (
-          SELECT ac.ac_gid, 
-              row_number() OVER (ORDER BY cr.cr_seq DESC) rnum,
-              COALESCE(cr.cr_pay, 'N') cr_pay, 
-              COALESCE(cr.pd_kind, '') pd_kind,
-              CASE 
-                  WHEN ac.ac_expire_date >= now() THEN 'Y' 
-                  ELSE 'N' 
-              END expire,
-              COALESCE(ap.anp_done, 'R') state
-          FROM mwd_person pe, mwd_account ac
-          LEFT JOIN mwd_choice_result cr ON cr.ac_gid = ac.ac_gid
-          LEFT JOIN mwd_answer_progress ap ON ap.cr_seq = cr.cr_seq
-          WHERE ac.ac_gid = ${ac_gid}::uuid
-            AND pe.pe_seq = ac.pe_seq 
-            AND ac.ac_use = 'Y'
-        ) t 
-        WHERE rnum = 1
-      `;
-      
-      // 2. 검사 목록 조회
-      const testsResult = await prisma.$queryRaw`
-        SELECT row_number() OVER (ORDER BY cr.cr_seq DESC) AS num, 
-              cr.cr_seq, 
-              cr.cr_pay, 
-              pr.pd_name,
-              COALESCE(ap.anp_seq, -1) AS anp_seq, 
-              COALESCE(TO_CHAR(ap.anp_start_date, 'yyyy-mm-dd hh24:mi:ss'), '') AS startdate,
-              COALESCE(TO_CHAR(ap.anp_end_date, 'yyyy-mm-dd'), '') AS enddate,
-              COALESCE(ap.anp_done, 'R') AS done,
-              CASE 
-                  WHEN cr.pd_kind = 'basic' 
-                      AND ac.ac_expire_date >= now() 
-                      AND COALESCE(ap.anp_done, '') = 'E' THEN 'Y'
-                  WHEN cr.pd_kind = 'basic' 
-                      AND ac.ac_expire_date <= now() THEN 'E'
-                  WHEN cr.pd_kind LIKE 'premium%' 
-                      AND COALESCE(ap.anp_done, '') = 'E' THEN 'P'
-                  ELSE 'N'
-              END AS rview,
-              TO_CHAR(ac.ac_expire_date, 'yyyy-mm-dd') AS expiredate
-        FROM mwd_product pr, mwd_account ac, mwd_choice_result cr
-        LEFT JOIN mwd_answer_progress ap ON ap.cr_seq = cr.cr_seq
-        WHERE ac.ac_gid = ${ac_gid}::uuid
-          AND cr.ac_gid = ac.ac_gid 
-          AND pr.pd_num = cr.pd_num
-      `;
-      
-      // 3. 사용자 정보 조회
-      const userInfoResult = await prisma.$queryRaw`
-        SELECT pe.pe_name, pe.pe_sex, pe.pe_email, pe.pe_cellphone,
-              pe.pe_birth_year, pe.pe_birth_month, pe.pe_birth_day
-        FROM mwd_account ac
-        JOIN mwd_person pe ON ac.pe_seq = pe.pe_seq
-        WHERE ac.ac_gid = ${ac_gid}::uuid
-        AND ac.ac_use = 'Y'
-      `;
-      
-      // 4. 완료된 검사 수 계산
-      const completedTests = Array.isArray(testsResult) 
-        ? testsResult.filter(test => test.done === 'E').length 
-        : 0;
-      
-      // BigInt 값을 문자열로 변환하는 함수
-      const convertBigIntToString = (obj: unknown): unknown => {
-        if (obj === null || obj === undefined) return obj;
-        
-        if (typeof obj === 'bigint') {
-          return obj.toString();
-        }
-        
-        if (Array.isArray(obj)) {
-          return obj.map(item => convertBigIntToString(item));
-        }
-        
-        if (typeof obj === 'object') {
-          const result: Record<string, unknown> = {};
-          for (const key in obj) {
-            result[key] = convertBigIntToString((obj as Record<string, unknown>)[key]);
-          }
-          return result;
-        }
-        
-        return obj;
-      };
-      
-      // 결과 처리
-      const safeAccountStatus = Array.isArray(accountStatusResult) && accountStatusResult.length > 0 
-        ? convertBigIntToString(accountStatusResult[0])
-        : { cr_pay: 'N', pd_kind: '', expire: 'N', state: 'R' };
-        
-      const safeTests = Array.isArray(testsResult) 
-        ? convertBigIntToString(testsResult)
-        : [];
-        
-      const safeUserInfo = Array.isArray(userInfoResult) && userInfoResult.length > 0
-        ? convertBigIntToString(userInfoResult[0])
-        : null;
-      
+      // 개인 대시보드 API로 내부 리다이렉트
       return NextResponse.json({
-        accountStatus: safeAccountStatus,
-        tests: safeTests,
-        completedTests,
-        userInfo: safeUserInfo,
+        redirect: '/api/dashboard/personal',
+        userType: 'personal',
         isOrganization: false
       });
     }

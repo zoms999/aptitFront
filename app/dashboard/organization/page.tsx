@@ -33,6 +33,15 @@ interface InstituteInfo {
   tur_code: string;
   tur_req_sum: number;
   tur_use_sum: number;
+  tur_is_paid: string;
+  tur_allow_no_payment: string;
+}
+
+interface TestStatus {
+  hasTest: boolean;
+  testCount: number;
+  completedCount: number;
+  latestTestStatus: string;
 }
 
 interface Member {
@@ -42,6 +51,7 @@ interface Member {
   pe_sex: string;
   pe_cellphone: string;
   join_date: string;
+  testStatus?: TestStatus;
 }
 
 interface DashboardData {
@@ -51,6 +61,8 @@ interface DashboardData {
   instituteInfo: InstituteInfo;
   members: Member[];
   isOrganization: boolean;
+  isOrganizationAdmin: boolean;
+  userType: string;
 }
 
 export default function OrganizationDashboard() {
@@ -176,12 +188,16 @@ export default function OrganizationDashboard() {
     return null;
   }
 
-  const { accountStatus, tests, instituteInfo, members } = dashboardData;
+  const { accountStatus, tests, instituteInfo, members, isOrganizationAdmin } = dashboardData;
   
   // 계정 상태에 따른 표시 정보
   const isPaid = accountStatus.cr_pay === 'Y';
   const isExpired = accountStatus.expire === 'N';
   const expireDate = tests.length > 0 ? tests[0].expiredate : '만료일 없음';
+
+  // 기관 결제 상태
+  const isInstitutePaid = instituteInfo?.tur_is_paid === 'Y';
+  const allowNoPayment = instituteInfo?.tur_allow_no_payment === 'Y';
 
   return (
     <div className="flex flex-col min-h-screen bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 relative overflow-hidden">
@@ -288,7 +304,7 @@ export default function OrganizationDashboard() {
                 </p>
               </div>
               
-              <div className={`bg-gradient-to-br ${isPaid ? 'from-green-50/80 to-green-100/80 border-green-200/50' : 'from-red-50/80 to-red-100/80 border-red-200/50'} backdrop-blur-sm border rounded-xl p-6 hover:shadow-lg transition-all duration-300 hover:scale-105 group`}>
+              {/* <div className={`bg-gradient-to-br ${isPaid ? 'from-green-50/80 to-green-100/80 border-green-200/50' : 'from-red-50/80 to-red-100/80 border-red-200/50'} backdrop-blur-sm border rounded-xl p-6 hover:shadow-lg transition-all duration-300 hover:scale-105 group`}>
                 <div className="flex items-center justify-between mb-2">
                   <h3 className={`text-sm font-medium ${isPaid ? 'text-green-700' : 'text-red-700'}`}>계정 상태</h3>
                   <div className={`w-10 h-10 bg-gradient-to-br ${isPaid ? 'from-green-500 to-green-600' : 'from-red-500 to-red-600'} rounded-xl flex items-center justify-center shadow-lg group-hover:shadow-xl transition-all duration-300 group-hover:scale-110`}>
@@ -300,7 +316,39 @@ export default function OrganizationDashboard() {
                 <p className={`text-xl font-bold ${isPaid ? 'text-green-900' : 'text-red-900'}`}>
                   {isPaid ? '결제됨' : '미결제'}
                 </p>
-              </div>
+              </div> */}
+              
+              {isOrganizationAdmin && (
+                <div className={`bg-gradient-to-br ${isInstitutePaid ? 'from-green-50/80 to-green-100/80 border-green-200/50' : 'from-red-50/80 to-red-100/80 border-red-200/50'} backdrop-blur-sm border rounded-xl p-6 hover:shadow-lg transition-all duration-300 hover:scale-105 group`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className={`text-sm font-medium ${isInstitutePaid ? 'text-green-700' : 'text-red-700'}`}>기관 결제 상태</h3>
+                    <div className={`w-10 h-10 bg-gradient-to-br ${isInstitutePaid ? 'from-green-500 to-green-600' : 'from-red-500 to-red-600'} rounded-xl flex items-center justify-center shadow-lg group-hover:shadow-xl transition-all duration-300 group-hover:scale-110`}>
+                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                      </svg>
+                    </div>
+                  </div>
+                  <p className={`text-xl font-bold ${isInstitutePaid ? 'text-green-900' : 'text-red-900'}`}>
+                    {isInstitutePaid ? '결제완료' : '미결제'}
+                  </p>
+                </div>
+              )}
+              
+              {isOrganizationAdmin && !isInstitutePaid && (
+                <div className={`bg-gradient-to-br ${allowNoPayment ? 'from-blue-50/80 to-blue-100/80 border-blue-200/50' : 'from-orange-50/80 to-orange-100/80 border-orange-200/50'} backdrop-blur-sm border rounded-xl p-6 hover:shadow-lg transition-all duration-300 hover:scale-105 group`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className={`text-sm font-medium ${allowNoPayment ? 'text-blue-700' : 'text-orange-700'}`}>미결제 검사 허용</h3>
+                    <div className={`w-10 h-10 bg-gradient-to-br ${allowNoPayment ? 'from-blue-500 to-blue-600' : 'from-orange-500 to-orange-600'} rounded-xl flex items-center justify-center shadow-lg group-hover:shadow-xl transition-all duration-300 group-hover:scale-110`}>
+                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                  </div>
+                  <p className={`text-xl font-bold ${allowNoPayment ? 'text-blue-900' : 'text-orange-900'}`}>
+                    {allowNoPayment ? '허용됨' : '차단됨'}
+                  </p>
+                </div>
+              )}
               
               <div className={`bg-gradient-to-br ${isExpired ? 'from-red-50/80 to-red-100/80 border-red-200/50' : 'from-green-50/80 to-green-100/80 border-green-200/50'} backdrop-blur-sm border rounded-xl p-6 hover:shadow-lg transition-all duration-300 hover:scale-105 group`}>
                 <div className="flex items-center justify-between mb-2">
@@ -319,6 +367,7 @@ export default function OrganizationDashboard() {
           </div>
 
           {/* 회원 목록 */}
+          {isOrganizationAdmin && (
           <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-white/20 p-8 hover:shadow-2xl transition-all duration-300 animate-fade-in-delay-2">
             <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center">
               <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center mr-3 shadow-lg">
@@ -350,6 +399,7 @@ export default function OrganizationDashboard() {
                         <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">성별</th>
                         <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">연락처</th>
                         <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">가입일</th>
+                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">검사 상태</th>
                       </tr>
                     </thead>
                     <tbody className="bg-white/80 backdrop-blur-sm divide-y divide-gray-200/50">
@@ -367,6 +417,41 @@ export default function OrganizationDashboard() {
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{member.pe_cellphone}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{member.join_date}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                            {member.testStatus ? (
+                              <div className="flex flex-col space-y-1">
+                                <div className="flex items-center space-x-2">
+                                  <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-bold shadow-sm ${
+                                    member.testStatus.hasTest 
+                                      ? 'bg-gradient-to-r from-green-100 to-green-200 text-green-800'
+                                      : 'bg-gradient-to-r from-gray-100 to-gray-200 text-gray-800'
+                                  }`}>
+                                    <div className={`w-2 h-2 ${member.testStatus.hasTest ? 'bg-green-500' : 'bg-gray-500'} rounded-full mr-1`}></div>
+                                    {member.testStatus.hasTest ? '검사있음' : '검사없음'}
+                                  </span>
+                                </div>
+                                {member.testStatus.hasTest && (
+                                  <div className="text-xs text-gray-600">
+                                    {member.testStatus.completedCount}/{member.testStatus.testCount} 완료
+                                  </div>
+                                )}
+                                {member.testStatus.latestTestStatus !== 'none' && (
+                                  <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-bold shadow-sm ${
+                                    member.testStatus.latestTestStatus === 'E' 
+                                      ? 'bg-gradient-to-r from-blue-100 to-blue-200 text-blue-800'
+                                      : member.testStatus.latestTestStatus === 'I'
+                                      ? 'bg-gradient-to-r from-yellow-100 to-yellow-200 text-yellow-800'
+                                      : 'bg-gradient-to-r from-gray-100 to-gray-200 text-gray-800'
+                                  }`}>
+                                    {member.testStatus.latestTestStatus === 'E' ? '완료' : 
+                                     member.testStatus.latestTestStatus === 'I' ? '진행중' : '준비'}
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-gray-400 text-xs">계정없음</span>
+                            )}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -375,6 +460,7 @@ export default function OrganizationDashboard() {
               </div>
             )}
           </div>
+          )}
 
           {/* 내 검사 목록 */}
           <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-white/20 p-8 hover:shadow-2xl transition-all duration-300 animate-fade-in-delay-3">

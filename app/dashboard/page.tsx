@@ -89,21 +89,37 @@ export default function Dashboard() {
       }
       
       setLoading(true);
-      console.log('Fetching dashboard data...');
-      console.log('Session info:', session);
+      console.log('대시보드 리다이렉트 중...');
+      console.log('세션 정보:', session);
       
       const response = await fetch('/api/dashboard');
-      console.log('API response status:', response.status);
+      console.log('API 응답 상태:', response.status);
       
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        console.error('API error:', errorData);
+        console.error('API 오류:', errorData);
         setErrorDetails(errorData);
         throw new Error(errorData.error || '데이터를 가져오는데 실패했습니다');
       }
       
       const data = await response.json();
-      console.log('Dashboard data received:', data);
+      console.log('대시보드 응답 데이터:', data);
+      
+      // API에서 리다이렉트 경로를 제공하는 경우
+      if (data.redirect) {
+        console.log('API 리다이렉트:', data.redirect);
+        
+        // API 경로를 페이지 경로로 변환
+        if (data.redirect === '/api/dashboard/organization') {
+          router.push('/dashboard/organization');
+          return;
+        } else if (data.redirect === '/api/dashboard/personal') {
+          router.push('/dashboard/personal');
+          return;
+        }
+      }
+      
+      // 기존 방식 (하위 호환성)
       setDashboardData(data);
       
       // 회원 유형에 따라 적절한 대시보드 페이지로 리다이렉트
@@ -119,7 +135,7 @@ export default function Dashboard() {
         }
       }
     } catch (err) {
-      console.error('Dashboard fetch error:', err);
+      console.error('대시보드 가져오기 오류:', err);
       setError(err instanceof Error ? err.message : '오류가 발생했습니다');
     } finally {
       setLoading(false);

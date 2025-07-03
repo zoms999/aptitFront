@@ -40,6 +40,45 @@ export function processLanguage(request: Request): string {
  * 계정 상태를 조회합니다
  */
 export async function getAccountStatus(userId: string): Promise<AccountStatus> {
+  // 먼저 계정이 기관 회원인지 확인
+  const accountTypeResult = await prisma.$queryRaw`
+    SELECT ac.ins_seq, ac.pe_seq
+    FROM mwd_account ac
+    WHERE ac.ac_gid = ${userId}::uuid
+      AND ac.ac_use = 'Y'
+  ` as Array<{ ins_seq: number; pe_seq: number }>;
+
+  if (!Array.isArray(accountTypeResult) || accountTypeResult.length === 0) {
+    throw new Error('계정 정보를 찾을 수 없습니다');
+  }
+
+  const accountInfo = accountTypeResult[0];
+  const isOrganizationMember = accountInfo.ins_seq > 0; // 기관 회원인 경우 ins_seq > 0
+  
+  // 기관 회원인 경우 기관 결제 상태 확인
+  if (isOrganizationMember) {
+    const institutePaymentResult = await prisma.$queryRaw`
+      SELECT tur.tur_is_paid, tur.tur_allow_no_payment, ins.ins_name
+      FROM mwd_account ac
+      JOIN mwd_institute ins ON ac.ins_seq = ins.ins_seq
+      JOIN mwd_institute_turn tur ON ins.ins_seq = tur.ins_seq
+      WHERE ac.ac_gid = ${userId}::uuid
+        AND tur.tur_use = 'Y'
+    ` as Array<{ tur_is_paid: string; tur_allow_no_payment: string; ins_name: string }>;
+
+    if (Array.isArray(institutePaymentResult) && institutePaymentResult.length > 0) {
+      const paymentInfo = institutePaymentResult[0];
+      const isPaid = paymentInfo.tur_is_paid === 'Y';
+      const allowNoPayment = paymentInfo.tur_allow_no_payment === 'Y';
+      
+      // 미결제이면서 검사를 허용하지 않는 경우 차단
+      if (!isPaid && !allowNoPayment) {
+        throw new Error(`${paymentInfo.ins_name} 기관의 검사 비용이 결제되지 않아 검사를 진행할 수 없습니다. 기관 관리자에게 문의하세요.`);
+      }
+    }
+  }
+
+  // 기존 계정 상태 조회 로직 (개인 회원 또는 결제 상태 확인 완료된 기관 회원)
   const accountStatusResult = await prisma.$queryRaw`
     SELECT cr_pay, pd_kind, expire, state 
     FROM (
@@ -50,8 +89,8 @@ export async function getAccountStatus(userId: string): Promise<AccountStatus> {
             COALESCE(cr.pd_kind, '') pd_kind,
             CASE WHEN ac.ac_expire_date >= now() THEN 'Y' ELSE 'N' END AS expire,
             COALESCE(ap.anp_done, 'R') AS state
-        FROM mwd_person pe
-        JOIN mwd_account ac ON pe.pe_seq = ac.pe_seq
+        FROM mwd_account ac
+        LEFT JOIN mwd_person pe ON ac.pe_seq = pe.pe_seq
         LEFT OUTER JOIN mwd_choice_result cr ON cr.ac_gid = ac.ac_gid
         LEFT OUTER JOIN mwd_answer_progress ap ON ap.cr_seq = cr.cr_seq
         WHERE ac.ac_gid = ${userId}::uuid

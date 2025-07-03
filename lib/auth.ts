@@ -23,6 +23,15 @@ interface GenderResult {
   pe_sex: string;
 }
 
+// 기관 관리자 계정 결과 타입을 별도로 정의
+interface OrgAdminAccountResult {
+  ins_seq: number;
+  ins_manager1_name: string; // mwd_institute에서 이름을 가져옴
+  ac_gid: string;
+  ac_use: string;
+  ac_id: string;
+}
+
 // Auth 옵션 정의
 export const authOptions = {
   debug: process.env.NODE_ENV === 'development',
@@ -41,25 +50,27 @@ export const authOptions = {
         }
 
         try {
-          // 개인 계정 로그인
-          if (credentials.loginType === "personal") {
-            // 사용자 계정 정보 조회
+          // 로그인 타입을 명확히 구분하여 처리
+          const { loginType, username, password, sessionCode } = credentials;
+
+          // 1. 일반 개인 사용자 로그인
+          if (loginType === "personal") {
             const accountResult = await prisma.$queryRaw<AccountResult[]>`
               SELECT pe.pe_seq, pe.pe_name, ac.ac_gid, ac.ac_use, ac.ac_id
-              FROM mwd_person pe, mwd_account ac 
-              WHERE ac.pe_seq = pe.pe_seq 
-                AND ac.ac_id = lower(${credentials.username}) 
-                AND ac.ac_pw = CRYPT(${credentials.password}, ac.ac_pw)
+              FROM mwd_person pe
+              JOIN mwd_account ac ON ac.pe_seq = pe.pe_seq 
+              WHERE ac.ac_id = lower(${username}) 
+                AND ac.ac_pw = CRYPT(${password}, ac.ac_pw)
             `;
 
             if (accountResult.length === 0 || accountResult[0].ac_use !== 'Y') {
-              console.log('로그인 실패: 계정 정보 없음 또는 비활성화된 계정');
               return null;
             }
-
-            const acGid = accountResult[0].ac_gid;
-            const peName = accountResult[0].pe_name;
-            const acId = accountResult[0].ac_id;
+            
+            const userAccount = accountResult[0];
+            const acGid = userAccount.ac_gid;
+            const peName = userAccount.pe_name;
+            const acId = userAccount.ac_id;
 
             console.log('계정 정보 확인됨:', { acGid, peName, acId });
 
@@ -123,7 +134,6 @@ export const authOptions = {
               // 성별 정보 조회 실패는 기본값 처리로 진행
             }
 
-            // 사용자 세션 데이터 구성
             return {
               id: acGid,
               name: peName,
@@ -136,79 +146,89 @@ export const authOptions = {
               ac_id: acId
             };
           } 
-          // 기관 계정 로그인 (세션코드 필요)
-          else if (credentials.loginType === "organization" && credentials.sessionCode) {
-            // 세션코드 유효성 검사
-            try {
-              const url = process.env.NEXTAUTH_URL || 'http://localhost:3002';
-              const codeVerification = await fetch(`${url}/api/verify-session-code`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ code: credentials.sessionCode }),
-              });
-              
-              const verificationResult = await codeVerification.json();
-              
-              if (!verificationResult.valid) {
-                console.log('세션코드 검증 실패:', verificationResult.message);
+          // 2. 기관 로그인 (관리자 또는 소속 사용자)
+          else if (loginType === "organization") {
+            if (!sessionCode) {
                 return null;
-              }
-              
-              console.log('세션코드 검증 성공:', verificationResult);
-            } catch (verificationError) {
-              console.error('세션코드 검증 요청 실패:', verificationError);
-              return null;
             }
 
-            // 사용자 계정 정보 조회
-            const accountResult = await prisma.$queryRaw<AccountResult[]>`
-              SELECT pe.pe_seq, pe.pe_name, ac.ac_gid, ac.ac_use, ac.ac_id
-              FROM mwd_person pe, mwd_account ac 
-              WHERE ac.pe_seq = pe.pe_seq 
-                AND ac.ac_id = lower(${credentials.username}) 
-                AND ac.ac_pw = CRYPT(${credentials.password}, ac.ac_pw)
+            // 회차코드 유효성 검사 및 정보 조회 (ins_seq, tur_seq를 여기서 얻음)
+            interface TurnInfo { ins_seq: number; tur_seq: number; }
+            const verificationResult = await prisma.$queryRaw<TurnInfo[]>`
+                SELECT tur.ins_seq, tur.tur_seq
+                FROM mwd_institute_turn tur
+                WHERE tur.tur_code = ${sessionCode} AND tur.tur_use = 'Y'
             `;
 
-            if (accountResult.length === 0 || accountResult[0].ac_use !== 'Y') {
-              console.log('로그인 실패: 계정 정보 없음 또는 비활성화된 계정');
-              return null;
+            if (verificationResult.length === 0) {
+                console.log('세션코드 검증 실패: 유효하지 않은 코드');
+                return null;
+            }
+            const { ins_seq, tur_seq } = verificationResult[0]; // 회차 정보에서 기관/회차 ID 확보
+
+            // 기관 관리자로 로그인 시도 (1순위)
+            const adminAccountResult = await prisma.$queryRaw<OrgAdminAccountResult[]>`
+              SELECT i.ins_seq, i.ins_manager1_name, ac.ac_gid, ac.ac_use, ac.ac_id
+              FROM mwd_institute i
+              JOIN mwd_account ac ON ac.ins_seq = i.ins_seq
+              WHERE ac.pe_seq = -1
+                AND ac.ins_seq = ${ins_seq} -- << 해당 기관의 관리자인지 확인
+                AND ac.ac_id = lower(${username})
+                AND ac.ac_pw = CRYPT(${password}, ac.ac_pw)
+            `;
+            if (adminAccountResult.length > 0 && adminAccountResult[0].ac_use === 'Y') {
+                const adminAccount = adminAccountResult[0];
+                return {
+                    id: adminAccount.ac_gid,
+                    name: adminAccount.ins_manager1_name,
+                    type: "organization_admin",
+                    sessionCode: sessionCode,
+                    ac_id: adminAccount.ac_id,
+                    ins_seq: adminAccount.ins_seq,
+                };
             }
 
-            const acGid = accountResult[0].ac_gid;
-            const peName = accountResult[0].pe_name;
-            const acId = accountResult[0].ac_id;
+            // 기관 소속 개인 사용자로 로그인 시도 (2순위)
+            const memberAccountResult = await prisma.$queryRaw<AccountResult[]>`
+                SELECT pe.pe_seq, pe.pe_name, ac.ac_gid, ac.ac_use, ac.ac_id
+                FROM mwd_person pe
+                JOIN mwd_account ac ON ac.pe_seq = pe.pe_seq
+                JOIN mwd_institute_member im ON im.pe_seq = pe.pe_seq
+                WHERE ac.ac_id = lower(${username})
+                  AND ac.ac_pw = CRYPT(${password}, ac.ac_pw)
+                  AND im.ins_seq = ${ins_seq}
+                  AND im.tur_seq = ${tur_seq}
+            `;
 
-            console.log('계정 정보 확인됨:', { acGid, peName, acId });
-
-            // 로그인 로그 기록
-            try {
-              // user_agent JSON 형식으로 변환
-              const userAgentJson = JSON.stringify({ source: 'Web Login (Organization)' });
-              
-              await prisma.$queryRaw`
-                INSERT INTO mwd_log_login_account (login_date, user_agent, ac_gid) 
-                VALUES (now(), ${userAgentJson}::json, ${acGid}::uuid)
-              `;
-              console.log('로그인 로그 기록 완료');
-            } catch (logError) {
-              console.error('로그인 로그 기록 실패:', logError);
-              // 로그 기록 실패는 로그인 진행에 영향 없음
+            if (memberAccountResult.length > 0 && memberAccountResult[0].ac_use === 'Y') {
+                const memberAccount = memberAccountResult[0];
+                // 로그인 로그 기록
+                try {
+                  const userAgentJson: string = JSON.stringify({ source: 'Web Login (Organization Member)' });
+                  await prisma.$queryRaw`
+                    INSERT INTO mwd_log_login_account (login_date, user_agent, ac_gid) 
+                    VALUES (now(), ${userAgentJson}::json, ${memberAccount.ac_gid}::uuid)
+                  `;
+                } catch (logError) {
+                  console.error('기관 소속 사용자 로그 기록 실패:', logError);
+                }
+                
+                return {
+                    id: memberAccount.ac_gid,
+                    name: memberAccount.pe_name,
+                    type: "organization_member",
+                    sessionCode: sessionCode,
+                    ac_id: memberAccount.ac_id,
+                };
             }
 
-            return {
-              id: acGid,
-              name: peName,
-              type: "organization",
-              sessionCode: credentials.sessionCode,
-              ac_id: acId
-            };
+            console.log('기관 로그인 실패: 일치하는 계정 정보 없음 또는 해당 회차 소속 아님');
+            return null;
           }
 
-          return null;
+          return null; // 그 외의 경우는 로그인 실패
         } catch (error) {
-          console.error("로그인 중 오류 발생:", error);
+          console.error("Authorize 함수 오류:", error);
           return null;
         }
       }
@@ -236,69 +256,50 @@ export const authOptions = {
   },
   callbacks: {
     async jwt({ token, user }: { token: any, user: any }) {
-      if (user) {
-        // 필수 필드 확인
-        if (!user.id || !(user as any).ac_id) {
-          console.error('JWT 콜백: 필수 사용자 정보 누락', { id: user.id, ac_id: (user as any).ac_id });
-          throw new Error('필수 사용자 정보가 누락되었습니다');
+        if (user) {
+            token.id = user.id;
+            token.name = user.name;
+            token.ac_id = user.ac_id;
+            token.type = user.type; // 'personal', 'organization_admin', 'organization_member'
+
+            if (user.type === "organization_admin") {
+                token.sessionCode = user.sessionCode;
+                token.ins_seq = user.ins_seq;
+            } else if (user.type === "organization_member") {
+                token.sessionCode = user.sessionCode;
+            } else if (user.type === "personal") {
+                token.sex = user.sex;
+                token.isPaid = user.isPaid;
+                token.productType = user.productType;
+                token.isExpired = user.isExpired;
+                token.state = user.state;
+            }
         }
-        
-        token.id = user.id;
-        token.name = user.name;
-        token.type = (user as any).type;
-        token.ac_id = (user as any).ac_id;
-        
-        // 디버깅을 위한 로그 추가
-        console.log('JWT User:', JSON.stringify(user, null, 2));
-        console.log('JWT Token after update:', JSON.stringify(token, null, 2));
-        
-        if ((user as any).type === "personal") {
-          token.sex = (user as any).sex;
-          token.isPaid = (user as any).isPaid;
-          token.productType = (user as any).productType;
-          token.isExpired = (user as any).isExpired;
-          token.state = (user as any).state;
-        } else if ((user as any).type === "organization") {
-          token.sessionCode = (user as any).sessionCode;
-        }
-      }
-      return token;
+        return token;
     },
-    async session({ session, token }: { session: any, token: any }) {
-      // 디버깅을 위한 로그 추가
-      //console.log('Session Token:', JSON.stringify(token, null, 2));
-      //console.log('Session Before:', JSON.stringify(session, null, 2));
-      
-      // 필수 필드 확인
-      if (!token.id || !(token as any).ac_id) {
-        console.error('세션 콜백: 필수 토큰 정보 누락', { id: token.id, ac_id: (token as any).ac_id });
-        return {
-          ...session,
-          error: '세션 정보가 불완전합니다. 다시 로그인해 주세요.'
-        };
-      }
-      
-      if (session.user) {
-        session.user.id = token.id;
-        session.user.name = token.name;
-        session.user.type = (token as any).type;
-        session.user.ac_id = (token as any).ac_id;
-        
-        if ((token as any).type === "personal") {
-          session.user.sex = (token as any).sex;
-          session.user.isPaid = (token as any).isPaid;
-          session.user.productType = (token as any).productType;
-          session.user.isExpired = (token as any).isExpired;
-          session.user.state = (token as any).state;
-        } else if ((token as any).type === "organization") {
-          session.user.sessionCode = (token as any).sessionCode;
+    async session({ session, token }: { session: unknown, token: unknown }) {
+        const s = session as Record<string, any>;
+        const t = token as Record<string, any>;
+        if (s.user) {
+            s.user.id = t.id;
+            s.user.name = t.name;
+            s.user.ac_id = t.ac_id;
+            s.user.type = t.type;
+
+            if (t.type === "organization_admin") {
+                s.user.sessionCode = t.sessionCode;
+                s.user.ins_seq = t.ins_seq;
+            } else if (t.type === "organization_member") {
+                s.user.sessionCode = t.sessionCode;
+            } else if (t.type === "personal") {
+                s.user.sex = t.sex;
+                s.user.isPaid = t.isPaid;
+                s.user.productType = t.productType;
+                s.user.isExpired = t.isExpired;
+                s.user.state = t.state;
+            }
         }
-      }
-      
-      // 디버깅을 위한 로그 추가
-      //console.log('Session After:', JSON.stringify(session, null, 2));
-      
-      return session;
-    },
+        return s;
+    }
   },
 }; 
