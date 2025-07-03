@@ -18,14 +18,12 @@ interface PreferenceTestProps {
   questions: Question[];
   selectedAnswers: Record<string, number>;
   onSelectChoice: (questionCode: string, choiceValue: number, choiceWeight: number) => void;
-  currentImageNumber: number;
 }
 
-export default function PreferenceTest({ 
-  questions, 
-  selectedAnswers, 
-  onSelectChoice, 
-  currentImageNumber 
+export default function PreferenceTest({
+  questions,
+  selectedAnswers,
+  onSelectChoice
 }: PreferenceTestProps) {
   // 개발 환경에서만 자동 답변 선택 기능
   useEffect(() => {
@@ -123,18 +121,18 @@ export default function PreferenceTest({
                           <img 
                             src={question.qu_images[0]} 
                             alt="검사 이미지" 
-                            className="w-full h-auto transition-all duration-500 group-hover/image:scale-105 max-w-lg mx-auto"
+                            className="w-full h-auto transition-all duration-500 group-hover/image:scale-105 max-w-md mx-auto"
                           />
                           <div className="absolute inset-0 bg-gradient-to-t from-black/10 via-transparent to-transparent opacity-0 group-hover/image:opacity-100 transition duration-300"></div>
                         </div>
                       ) : (
-                        <div className="grid grid-cols-1 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           {question.qu_images.map((image, imgIndex) => (
                             <div key={imgIndex} className="relative overflow-hidden rounded-2xl shadow-2xl group/image">
                               <img 
                                 src={image} 
                                 alt={`검사 이미지 ${imgIndex + 1}`} 
-                                className="w-full h-auto transition-all duration-500 group-hover/image:scale-105 max-w-lg mx-auto"
+                                className="w-full h-auto transition-all duration-500 group-hover/image:scale-105"
                               />
                               <div className="absolute inset-0 bg-gradient-to-t from-black/10 via-transparent to-transparent opacity-0 group-hover/image:opacity-100 transition duration-300"></div>
                             </div>

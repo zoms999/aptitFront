@@ -76,7 +76,6 @@ export default function TestStartPage({ params }: TestStartPageProps) {
   const [error, setError] = useState<string | null>(null);
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, number>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [currentImageNumber, setCurrentImageNumber] = useState<number>(2);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogContent, setDialogContent] = useState({ title: '', description: '' });
   
@@ -89,7 +88,6 @@ export default function TestStartPage({ params }: TestStartPageProps) {
   const getStorageKeys = () => ({
     testData: `test_data_${testId}`,
     selectedAnswers: `test_answers_${testId}`,
-    currentImageNumber: `test_image_number_${testId}`,
     lastUpdateTime: `test_last_update_${testId}`
   });
 
@@ -117,7 +115,6 @@ export default function TestStartPage({ params }: TestStartPageProps) {
       const keys = getStorageKeys();
       sessionStorage.removeItem(keys.testData);
       sessionStorage.removeItem(keys.selectedAnswers);
-      sessionStorage.removeItem(keys.currentImageNumber);
       sessionStorage.removeItem(keys.lastUpdateTime);
       
       // 추가로 모든 테스트 관련 localStorage도 정리
@@ -147,7 +144,6 @@ export default function TestStartPage({ params }: TestStartPageProps) {
       // 🔥 F5 새로고침 시에도 항상 저장소 정리하고 DB에서 최신 데이터 가져오기
       clearStorage(); // 모든 저장된 데이터 정리
       setSelectedAnswers({}); // 답변 상태 초기화
-      setCurrentImageNumber(2); // 이미지 번호 초기화
       fetchTestData();
       return;
     }
@@ -169,7 +165,6 @@ export default function TestStartPage({ params }: TestStartPageProps) {
       // 🔥 F5 새로고침 시에도 항상 저장소 정리하고 DB에서 최신 데이터 가져오기
       clearStorage(); // 모든 저장된 데이터 정리
       setSelectedAnswers({}); // 답변 상태 초기화
-      setCurrentImageNumber(2); // 이미지 번호 초기화
       fetchTestData();
     }
   }, [status, router, testId]);
@@ -485,9 +480,6 @@ export default function TestStartPage({ params }: TestStartPageProps) {
             });
           }, 0);
           
-          // 이미지 번호 증가
-          const newImageNumber = (currentImageNumber % 10) + 1;
-          setCurrentImageNumber(newImageNumber);
           
           // 선택 답변 초기화
           setSelectedAnswers({});
@@ -668,7 +660,6 @@ export default function TestStartPage({ params }: TestStartPageProps) {
                     questions={testData.questions}
                     selectedAnswers={selectedAnswers}
                     onSelectChoice={handleSelectChoice}
-                    currentImageNumber={currentImageNumber}
                   />
                 )}
               </div>
