@@ -1,3 +1,5 @@
+import { DetailedPersonality } from '@/components/results/DetailedPersonalityTab';
+
 export interface Tendency {
   rank: number;
   tendency_name: string;
@@ -12,7 +14,7 @@ export interface TestResult {
   topTendencyExplains: Tendency[];
   bottomTendencyExplains: Tendency[];
   // 다른 탭들을 위한 데이터 타입 추가
-  detailedPersonality: any;
+  detailedPersonality: DetailedPersonality[];
   learningStyle: any;
   recommendations: any;
   pe_name: string; // 최상위 레벨에 pe_name 추가

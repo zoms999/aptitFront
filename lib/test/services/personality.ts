@@ -186,3 +186,21 @@ export async function getPersonalityAnalysisResult(anp_seq: number) {
     throw error;
   }
 }
+interface DetailedPersonalityResult {
+  qu_explain: string;
+  rank: number;
+}
+
+export async function getDetailedPersonalityResult(anp_seq: number) {
+  return await prisma.$queryRaw<DetailedPersonalityResult[]>`
+    select qu.qu_explain, sc1.sc1_rank as rank
+      from mwd_answer an, mwd_question qu,
+      (select qua_code, sc1_rank from mwd_score1 sc1
+       where anp_seq = ${anp_seq} and sc1_step='tnd' and sc1_rank <= 3) sc1
+      where an.anp_seq = ${anp_seq}
+      and qu.qu_code = an.qu_code and qu.qu_use = 'Y'
+      and qu.qu_qusyn = 'Y' and qu.qu_kind1 = 'tnd'
+      and an.an_wei >= 4 and qu.qu_kind2 = sc1.qua_code
+      order by sc1.sc1_rank, an.an_wei desc
+  `;
+}

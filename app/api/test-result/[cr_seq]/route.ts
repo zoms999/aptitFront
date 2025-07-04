@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '../../../../lib/auth';
 import prisma from '../../../../lib/db';
-import { getPersonalityAnalysisResult } from '../../../../lib/test/services/personality';
+import { getPersonalityAnalysisResult, getDetailedPersonalityResult } from '../../../../lib/test/services/personality';
 
 export async function GET(
   request: Request,
@@ -90,7 +90,9 @@ export async function GET(
 
     // 6. 성향 분석 결과 조회
     const personalityResult = await getPersonalityAnalysisResult(anp_seq);
+    const detailedPersonalityResult = await getDetailedPersonalityResult(anp_seq);
     console.log(`[TEST-RESULT] Personality result:`, personalityResult);
+    console.log(`[TEST-RESULT] Detailed Personality result:`, detailedPersonalityResult);
 
     // 7. 최종 결과 데이터 구성
     const finalResult = {
@@ -105,6 +107,7 @@ export async function GET(
         testDate: result.cr_start_date,
       },
       ...personalityResult,
+      detailedPersonality: detailedPersonalityResult,
       // 다른 결과들도 여기에 추가 (예: 사고력, 역량 등)
     };
 
