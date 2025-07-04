@@ -3,18 +3,18 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import Header from "@/components/Header";
-import Footer from "../../components/Footer";
+import Header from '@/components/Header';
+import Footer from "@/components/Footer";
+import Tabs from '@/components/results/Tabs';
 
-interface TestResult {
-  cr_seq: number;
-  pd_name: string;
-  pe_name: string;
-  startdate: string;
-  enddate: string;
-  done: string;
-  // 추가 결과 데이터는 필요에 따라 확장
-}
+// 각 탭에 해당하는 컴포넌트들을 import 합니다.
+import PersonalInfoTab from '@/components/results/PersonalInfoTab';
+import PersonalityAnalysisTab from '@/components/results/PersonalityAnalysisTab';
+import DetailedPersonalityTab from '@/components/results/DetailedPersonalityTab';
+import JobRecommendationTab from '@/components/results/JobRecommendationTab';
+import PlaceholderTab from '@/components/results/PlaceholderTab';
+import LearningStyleTab from '@/components/results/LearningStyleTab';
+import { mockFullResult, TestResult } from '@/data/mockResult'; // 목업 데이터 분리
 
 export default function TestResultPage() {
   const params = useParams();
@@ -24,7 +24,25 @@ export default function TestResultPage() {
   const [testResult, setTestResult] = useState<TestResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   
+  // 탭 상태 관리
+  const [activeTab, setActiveTab] = useState('성향진단');
+
   const cr_seq = params.cr_seq as string;
+
+  const tabs = [
+    { id: '개인정보', label: '개인정보' },
+    { id: '성향진단', label: '성향진단' },
+    { id: '세부성향분석', label: '세부성향분석' },
+    { id: '사고력진단', label: '사고력진단' },
+    { id: '역량진단', label: '역량진단' },
+    { id: '선호도', label: '선호도' },
+    { id: '직무', label: '직무' },
+    { id: '성향적합직업학과', label: '성향적합 직업/학과' },
+    { id: '역량적합직업학과', label: '역량적합 직업/학과' },
+    { id: '학습법분석', label: '학습법분석' },
+    { id: '성향적합교과목', label: '성향적합 교과목' },
+    { id: '역량적합교과목', label: '역량적합 교과목' },
+  ];
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -40,18 +58,8 @@ export default function TestResultPage() {
   const fetchTestResult = async () => {
     try {
       setLoading(true);
-      
-      // 임시 데이터 (실제로는 API에서 가져와야 함)
-      const mockResult: TestResult = {
-        cr_seq: parseInt(cr_seq),
-        pd_name: "기본 검사",
-        pe_name: "테스트 사용자",
-        startdate: "2024-01-01 10:00:00",
-        enddate: "2024-01-01 11:30:00",
-        done: "E"
-      };
-      
-      setTestResult(mockResult);
+      // 실제 API 호출 대신 상세 목업 데이터 사용
+      setTestResult(mockFullResult);
     } catch (err) {
       console.error('Test result fetch error:', err);
       setError(err instanceof Error ? err.message : '결과를 가져오는데 실패했습니다');
@@ -62,7 +70,7 @@ export default function TestResultPage() {
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
+      <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 cursor-wait">
         <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-white/20 p-8">
           <div className="text-center">
             <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full mb-4 shadow-lg animate-pulse">
@@ -75,7 +83,6 @@ export default function TestResultPage() {
       </div>
     );
   }
-
   if (error) {
     return (
       <div className="flex flex-col min-h-screen bg-gradient-to-br from-red-50 via-orange-50 to-yellow-50">
@@ -92,7 +99,7 @@ export default function TestResultPage() {
               <p className="text-gray-700 mb-6">{error}</p>
               <button 
                 onClick={() => router.back()}
-                className="px-6 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-medium rounded-xl hover:from-blue-600 hover:to-indigo-700 transition-all duration-200 shadow-lg hover:shadow-xl"
+                className="px-6 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-medium rounded-xl hover:from-blue-600 hover:to-indigo-700 transition-all duration-200 shadow-lg hover:shadow-xl cursor-pointer"
               >
                 돌아가기
               </button>
@@ -108,91 +115,60 @@ export default function TestResultPage() {
     return null;
   }
 
+  const renderTabContent = () => {
+    switch (activeTab) {
+      case '개인정보':
+        return <PersonalInfoTab result={testResult} />;
+      case '성향진단':
+        return <PersonalityAnalysisTab result={testResult.personalityAnalysis} />;
+      case '세부성향분석':
+        return <DetailedPersonalityTab result={testResult.detailedPersonality} />;
+      case '학습법분석':
+        return <LearningStyleTab result={testResult.learningStyle} />;
+      case '성향적합직업학과':
+        return <JobRecommendationTab title="성향 기반 추천" recommendations={testResult.recommendations.byPersonality} />;
+      case '역량적합직업학과':
+        return <JobRecommendationTab title="역량 기반 추천" recommendations={testResult.recommendations.byCompetency} />;
+      case '성향적합교과목':
+        return <JobRecommendationTab title="성향 기반 추천 교과목" recommendations={testResult.recommendations.subjectsByPersonality} iconType="subject" />;
+      case '역량적합교과목':
+        return <JobRecommendationTab title="역량 기반 추천 교과목" recommendations={testResult.recommendations.subjectsByCompetency} iconType="subject" />;
+      default:
+        // 나머지 탭들은 Placeholder 컴포넌트로 대체하여 보여줍니다.
+        return <PlaceholderTab title={activeTab} />;
+    }
+  };
+
   return (
-    <div className="flex flex-col min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
+    <div className="flex flex-col min-h-screen bg-gray-50">
       <Header />
       
-      <main className="flex-grow p-4 relative">
-        <div className="w-full max-w-4xl mx-auto space-y-6">
-          {/* 헤더 */}
-          <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-white/20 p-8">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-3xl font-bold text-gray-900 bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-                  검사 결과
-                </h1>
-                <p className="text-gray-600 mt-2">검사 ID: {cr_seq}</p>
-              </div>
-              <button
-                onClick={() => router.back()}
-                className="px-6 py-3 bg-gradient-to-r from-gray-500 to-gray-600 text-white font-medium rounded-xl hover:from-gray-600 hover:to-gray-700 transition-all duration-200 shadow-lg hover:shadow-xl"
-              >
-                돌아가기
-              </button>
+      <main className="flex-grow p-4 md:p-8">
+        <div className="w-full max-w-6xl mx-auto space-y-8">
+          {/* 페이지 헤더 */}
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">
+                종합 결과 리포트
+              </h1>
+              <p className="text-gray-500 mt-1">응시자: {testResult.pe_name} (검사 ID: {cr_seq})</p>
             </div>
+            <button
+              onClick={() => router.back()}
+              className="px-5 py-2.5 bg-gray-800 text-white font-medium rounded-lg hover:bg-gray-700 transition-all duration-200 shadow-md cursor-pointer"
+            >
+              돌아가기
+            </button>
           </div>
 
-          {/* 검사 정보 */}
-          <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-white/20 p-8">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center">
-              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center mr-3 shadow-lg">
-                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-              </div>
-              검사 정보
-            </h2>
+          {/* 탭 네비게이션 및 콘텐츠 */}
+          <div className="bg-white rounded-2xl shadow-lg border border-gray-200/80">
+            {/* 탭 컴포넌트 */}
+            <Tabs tabs={tabs} activeTab={activeTab} setActiveTab={setActiveTab} />
             
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              <div className="bg-gradient-to-br from-blue-50/80 to-blue-100/80 backdrop-blur-sm border border-blue-200/50 rounded-xl p-6">
-                <h3 className="text-sm font-medium text-blue-700 mb-2">검사명</h3>
-                <p className="text-xl font-bold text-blue-900">{testResult.pd_name}</p>
-              </div>
-              
-              <div className="bg-gradient-to-br from-green-50/80 to-green-100/80 backdrop-blur-sm border border-green-200/50 rounded-xl p-6">
-                <h3 className="text-sm font-medium text-green-700 mb-2">응시자</h3>
-                <p className="text-xl font-bold text-green-900">{testResult.pe_name}</p>
-              </div>
-              
-              <div className="bg-gradient-to-br from-purple-50/80 to-purple-100/80 backdrop-blur-sm border border-purple-200/50 rounded-xl p-6">
-                <h3 className="text-sm font-medium text-purple-700 mb-2">상태</h3>
-                <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-bold bg-gradient-to-r from-green-100 to-emerald-100 text-emerald-800 shadow-sm">
-                  <div className="w-2 h-2 bg-emerald-500 rounded-full mr-2"></div>
-                  완료
-                </span>
-              </div>
-              
-              <div className="bg-gradient-to-br from-orange-50/80 to-orange-100/80 backdrop-blur-sm border border-orange-200/50 rounded-xl p-6">
-                <h3 className="text-sm font-medium text-orange-700 mb-2">시작 시간</h3>
-                <p className="text-lg font-bold text-orange-900">{testResult.startdate}</p>
-              </div>
-              
-              <div className="bg-gradient-to-br from-teal-50/80 to-teal-100/80 backdrop-blur-sm border border-teal-200/50 rounded-xl p-6">
-                <h3 className="text-sm font-medium text-teal-700 mb-2">완료 시간</h3>
-                <p className="text-lg font-bold text-teal-900">{testResult.enddate}</p>
-              </div>
-            </div>
-          </div>
-
-          {/* 결과 상세 */}
-          <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-white/20 p-8">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center">
-              <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center mr-3 shadow-lg">
-                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                </svg>
-              </div>
-              검사 결과 상세
-            </h2>
-            
-            <div className="text-center py-16 bg-gradient-to-br from-gray-50/80 to-gray-100/80 backdrop-blur-sm rounded-xl border border-gray-200/50">
-              <div className="w-20 h-20 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg">
-                <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-              </div>
-              <h3 className="text-xl font-bold text-gray-700 mb-2">상세 결과 준비 중</h3>
-              <p className="text-gray-500 text-lg">검사 결과 상세 분석이 곧 제공될 예정입니다.</p>
+            {/* 탭 콘텐츠 렌더링 영역 */}
+            <div className="p-6 md:p-8">
+              {renderTabContent()}
             </div>
           </div>
         </div>
@@ -201,4 +177,4 @@ export default function TestResultPage() {
       <Footer />
     </div>
   );
-} 
+}

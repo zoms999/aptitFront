@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "postgres": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-postgres",
+        "postgresql://hongsamcool:qkselkk106!@3.36.93.137:5432/octag3?schema=public"
+      ]
+    }
+  }
+}
