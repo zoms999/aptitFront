@@ -1,3 +1,4 @@
+import prisma from '../../db';
 import { TestResponse, TestContext } from '../types';
 import { getNextQuestion, getCurrentQuFilename, updateDummyQuestionCode } from '../queries/common';
 import { 
@@ -94,3 +95,94 @@ export async function handlePersonalityTest(context: TestContext): Promise<TestR
   console.log(`[성향진단] 응답 준비 완료: ${questions.length}개 문항`);
   return response;
 } 
+interface TendencyResult {
+  tnd1: string;
+  tnd2: string;
+}
+
+interface TendencyRank {
+  rank: number;
+  tendency_name: string;
+}
+
+interface TendencyExplain {
+  rank: number;
+  tendency_name: string;
+  explanation: string;
+}
+
+/**
+ * 성향진단 결과 데이터 조회
+ */
+export async function getPersonalityAnalysisResult(anp_seq: number) {
+  console.log(`[getPersonalityAnalysisResult] 성향진단 결과 조회 시작: anp_seq=${anp_seq}`);
+
+  try {
+    // 1. 주 성향 및 부 성향 조회
+    console.log(`[getPersonalityAnalysisResult] Step 1: 주/부 성향 조회 중...`);
+    const tendencyResult = await prisma.$queryRaw<TendencyResult[]>`
+      select max(case when rk = 1 then tnd end) as tnd1, max(case when rk = 2 then tnd end) as tnd2
+        from (
+          select replace(qa.qua_name,'형','') as tnd, 1 as rk
+          from mwd_resval rv, mwd_question_attr qa
+          where rv.anp_seq = ${anp_seq} and qa.qua_code = rv.rv_tnd1
+          union
+          select replace(qa.qua_name,'형','') as tnd, 2 as rk
+          from mwd_resval rv, mwd_question_attr qa
+          where rv.anp_seq = ${anp_seq} and qa.qua_code = rv.rv_tnd2
+        ) t
+    `;
+    console.log(`[getPersonalityAnalysisResult] 주/부 성향 조회 결과:`, tendencyResult);
+
+    // 1-1. mwd_resval 테이블 확인
+    const resvalCheck = await prisma.$queryRaw`
+      SELECT anp_seq, rv_tnd1, rv_tnd2 
+      FROM mwd_resval 
+      WHERE anp_seq = ${anp_seq}
+    `;
+    console.log(`[getPersonalityAnalysisResult] mwd_resval 확인:`, resvalCheck);
+
+    // 2. 상위/하위 성향 순위 조회
+    console.log(`[getPersonalityAnalysisResult] Step 2: 성향 순위 조회 중...`);
+    const tendencyRank = await prisma.$queryRaw<TendencyRank[]>`
+      SELECT
+        ts_rank as "rank",
+        ts_tendency as "tendency_name"
+      FROM mwd_tendency_score
+      WHERE anp_seq = ${anp_seq}
+      ORDER BY ts_rank
+    `;
+    console.log(`[getPersonalityAnalysisResult] 성향 순위 조회 결과:`, tendencyRank);
+
+    // 3. 성향 설명 조회
+    console.log(`[getPersonalityAnalysisResult] Step 3: 성향 설명 조회 중...`);
+    const tendencyExplain = await prisma.$queryRaw<TendencyExplain[]>`
+      SELECT
+        te_rank as "rank",
+        te_tendency as "tendency_name",
+        te_explanation as "explanation"
+      FROM mwd_tendency_explain
+      WHERE anp_seq = ${anp_seq}
+      ORDER BY te_rank
+    `;
+    console.log(`[getPersonalityAnalysisResult] 성향 설명 조회 결과:`, tendencyExplain);
+
+    const topTendencies = tendencyRank.filter((t: TendencyRank) => t.rank <= 5);
+    const bottomTendencies = tendencyRank.filter((t: TendencyRank) => t.rank > 5); // 예시: 5 초과를 하위로 가정
+
+    const result = {
+      tendency: tendencyResult[0] || { tnd1: 'N/A', tnd2: 'N/A' },
+      topTendencies,
+      bottomTendencies,
+      topTendencyExplains: tendencyExplain.filter((e: TendencyExplain) => topTendencies.some((t: TendencyRank) => t.rank === e.rank)),
+      bottomTendencyExplains: tendencyExplain.filter((e: TendencyExplain) => bottomTendencies.some((t: TendencyRank) => t.rank === e.rank)),
+    };
+
+    console.log(`[getPersonalityAnalysisResult] 최종 결과:`, result);
+    return result;
+
+  } catch (error) {
+    console.error(`[getPersonalityAnalysisResult] 오류 발생:`, error);
+    throw error;
+  }
+}

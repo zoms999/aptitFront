@@ -95,11 +95,51 @@ interface ImagePreference {
 // 개인용 검사결과 상세 조회 API
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const id = params.id;
+  const resolvedParams = await params;
+  const inputId = resolvedParams.id;
+  
+  console.log(`[TEST-RESULT-ID] 입력 ID: ${inputId} 로 검사결과 조회 시작`);
   
   try {
+    // inputId가 cr_seq인지 anp_seq인지 확인하고 anp_seq를 얻기
+    let anp_seq: string;
+    
+    // 먼저 anp_seq로 직접 조회 시도
+    const anpCheckQuery = `
+      SELECT anp_seq FROM mwd_answer_progress WHERE anp_seq = ${inputId}
+    `;
+    console.log(`[TEST-RESULT-ID] anp_seq 직접 조회 시도: ${anpCheckQuery}`);
+    const anpCheck = await db.$queryRawUnsafe(anpCheckQuery) as { anp_seq: number }[];
+    
+    if (anpCheck.length > 0) {
+      // inputId가 이미 anp_seq인 경우
+      anp_seq = inputId;
+      console.log(`[TEST-RESULT-ID] ${inputId}는 anp_seq로 확인됨`);
+    } else {
+      // inputId가 cr_seq일 가능성이 높으므로 anp_seq를 조회
+      const crToAnpQuery = `
+        SELECT anp_seq FROM mwd_answer_progress WHERE cr_seq = ${inputId}
+      `;
+      console.log(`[TEST-RESULT-ID] cr_seq로 anp_seq 조회: ${crToAnpQuery}`);
+      const crToAnp = await db.$queryRawUnsafe(crToAnpQuery) as { anp_seq: number }[];
+      
+      if (crToAnp.length === 0) {
+        return NextResponse.json({
+          success: false,
+          message: `ID ${inputId}에 해당하는 검사 결과를 찾을 수 없습니다.`
+        }, { status: 404 });
+      }
+      
+      anp_seq = crToAnp[0].anp_seq.toString();
+      console.log(`[TEST-RESULT-ID] cr_seq ${inputId} -> anp_seq ${anp_seq} 변환 완료`);
+    }
+    
+    const id = anp_seq; // 기존 코드와의 호환성을 위해
+    
+    console.log(`[TEST-RESULT-ID] anp_seq: ${id} 로 검사결과 조회 시작`);
+  
     // 개인 기본 정보 조회
     const personalInfoQuery = `
       select ac.ac_id as id, pe.pe_name as pname,

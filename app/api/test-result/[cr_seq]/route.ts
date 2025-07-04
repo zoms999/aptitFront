@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '../../../../lib/auth';
 import prisma from '../../../../lib/db';
+import { getPersonalityAnalysisResult } from '../../../../lib/test/services/personality';
 
 export async function GET(
   request: Request,
@@ -21,28 +22,35 @@ export async function GET(
       return NextResponse.json({ error: '유효하지 않은 검사 ID입니다' }, { status: 400 });
     }
 
-    // 3. 검사 결과 기본 정보 조회
+    console.log(`[TEST-RESULT] cr_seq: ${crSeq}, user: ${session.user.id}, type: ${session.user.type}`);
+
+    // 3. 검사 결과 기본 정보 조회 (권한 확인 포함)
     const resultInfo = await prisma.$queryRaw`
-      SELECT 
+      SELECT
         cr.cr_seq,
         cr.ac_gid,
         pe.pe_name,
         cr.cr_start_date,
         cr.cr_end_date,
-        ap.anp_done as status
+        ap.anp_seq,
+        ap.anp_done as status,
+        ac.ins_seq,
+        ${session.user.ins_seq || 0} as current_user_ins_seq
       FROM mwd_choice_result cr
       JOIN mwd_account ac ON cr.ac_gid = ac.ac_gid
       JOIN mwd_person pe ON ac.pe_seq = pe.pe_seq
       LEFT JOIN mwd_answer_progress ap ON cr.cr_seq = ap.cr_seq
       WHERE cr.cr_seq = ${crSeq}
-        AND cr.ac_gid = ${session.user.id}::uuid
     ` as Array<{
       cr_seq: number;
       ac_gid: string;
       pe_name: string;
       cr_start_date: Date;
       cr_end_date: Date | null;
+      anp_seq: number;
       status: string;
+      ins_seq: number;
+      current_user_ins_seq: number;
     }>;
 
     if (!Array.isArray(resultInfo) || resultInfo.length === 0) {
@@ -50,61 +58,59 @@ export async function GET(
     }
 
     const result = resultInfo[0];
+    console.log(`[TEST-RESULT] Found result:`, {
+      cr_seq: result.cr_seq,
+      ac_gid: result.ac_gid,
+      anp_seq: result.anp_seq,
+      ins_seq: result.ins_seq,
+      current_user_ins_seq: result.current_user_ins_seq
+    });
 
-    // 4. 목업 데이터 구성 (실제 구현 시 데이터베이스에서 조회)
-    const mockResult = {
+    // 4. 권한 확인
+    const isOwner = result.ac_gid === session.user.id;
+    const isOrganizationAdmin = session.user.type === 'organization_admin' && 
+                               session.user.ins_seq && 
+                               result.ins_seq === session.user.ins_seq;
+    
+    if (!isOwner && !isOrganizationAdmin) {
+      return NextResponse.json({ 
+        error: '이 검사 결과에 대한 접근 권한이 없습니다' 
+      }, { status: 403 });
+    }
+
+    // 5. anp_seq 확인
+    if (!result.anp_seq) {
+      return NextResponse.json({ 
+        error: '검사 진행 정보가 없습니다. 검사가 완료되지 않았을 수 있습니다.' 
+      }, { status: 404 });
+    }
+
+    const anp_seq = result.anp_seq;
+    console.log(`[TEST-RESULT] Using anp_seq: ${anp_seq}`);
+
+    // 6. 성향 분석 결과 조회
+    const personalityResult = await getPersonalityAnalysisResult(anp_seq);
+    console.log(`[TEST-RESULT] Personality result:`, personalityResult);
+
+    // 7. 최종 결과 데이터 구성
+    const finalResult = {
       cr_seq: result.cr_seq,
       pe_name: result.pe_name,
       cr_start_date: result.cr_start_date,
       cr_end_date: result.cr_end_date,
       status: result.status,
+      anp_seq: anp_seq, // 디버깅용
       personalInfo: {
-        name: result.pe_name,
+        pname: result.pe_name,
         testDate: result.cr_start_date,
-        testType: '종합 적성 검사',
-        completionTime: result.cr_end_date ? 
-          Math.round((new Date(result.cr_end_date).getTime() - new Date(result.cr_start_date).getTime()) / (1000 * 60)) : null
       },
-      tendency: [
-        { name: '외향성', score: 85, description: '활발하고 사교적인 성향' },
-        { name: '성실성', score: 78, description: '책임감이 강하고 계획적' },
-        { name: '개방성', score: 72, description: '새로운 경험에 열린 자세' }
-      ],
-      detailedPersonality: {
-        strengths: ['리더십', '의사소통', '문제해결'],
-        weaknesses: ['완벽주의', '스트레스 관리'],
-        recommendations: ['팀 프로젝트 참여', '스트레스 관리 기법 학습']
-      },
-      learningStyle: {
-        primaryStyle: '시각적 학습',
-        characteristics: ['도표와 그래프 선호', '체계적 정리'],
-        recommendations: ['마인드맵 활용', '시각적 자료 활용']
-      },
-      recommendations: {
-        byPersonality: [
-          { category: '직업', name: '프로젝트 매니저', match: 92 },
-          { category: '직업', name: '마케팅 전문가', match: 88 },
-          { category: '학과', name: '경영학과', match: 90 }
-        ],
-        byCompetency: [
-          { category: '직업', name: '데이터 분석가', match: 85 },
-          { category: '직업', name: '컨설턴트', match: 82 },
-          { category: '학과', name: '통계학과', match: 87 }
-        ],
-        subjectsByPersonality: [
-          { category: '교과목', name: '경영학 개론', match: 95 },
-          { category: '교과목', name: '마케팅 원론', match: 90 }
-        ],
-        subjectsByCompetency: [
-          { category: '교과목', name: '통계학', match: 88 },
-          { category: '교과목', name: '데이터 분석', match: 85 }
-        ]
-      }
+      ...personalityResult,
+      // 다른 결과들도 여기에 추가 (예: 사고력, 역량 등)
     };
 
     return NextResponse.json({
       success: true,
-      data: mockResult
+      data: finalResult
     });
 
   } catch (error) {
