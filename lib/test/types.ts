@@ -52,6 +52,7 @@ export interface ProgressInfo {
 
 export interface TestResponse {
   anp_seq: number;
+  cr_seq?: number; // 검사 결과 시퀀스 번호
   pd_kind: string;
   qu_filename: string;
   qu_code: string;

@@ -1,7 +1,7 @@
 import { TestResponse, TestContext, Question } from '../types';
 import { getNextQuestion, getCurrentQuFilename, findFirstRealQuestionFilename } from '../queries/common';
 import { getThinkingQuestionsWithLang, getThinkingQuestionsFallback } from '../queries/thinking';
-import { getProgressInfo } from '../utils';
+import { getProgressInfo, getCrSeq } from '../utils';
 
 /**
  * 사고력진단 테스트 처리
@@ -28,8 +28,12 @@ export async function handleThinkingTest(context: TestContext): Promise<TestResp
   if (context.accountStatus.pd_kind === 'basic') {
     console.log('[사고력진단] basic 상품 사용자는 사고력진단 접근 불가');
     
+    // cr_seq 조회
+    const crSeq = await getCrSeq(context.anpSeq);
+    
     const response: TestResponse = {
       anp_seq: context.anpSeq,
+      cr_seq: crSeq || undefined,
       pd_kind: context.accountStatus.pd_kind,
       qu_filename: '',
       qu_code: '',
@@ -78,15 +82,20 @@ export async function handleThinkingTest(context: TestContext): Promise<TestResp
   const progressInfo = await getProgressInfo(context.anpSeq);
   console.log(`[사고력진단] 진행률 정보:`, progressInfo);
 
-  // 8. 타이머 통계
+  // 8. cr_seq 조회
+  const crSeq = await getCrSeq(context.anpSeq);
+  console.log(`[사고력진단] cr_seq: ${crSeq}`);
+
+  // 9. 타이머 통계
   const timerQuestions = questions.filter(q => q.qu_time_limit_sec && q.qu_time_limit_sec > 0);
   const noTimerQuestions = questions.filter(q => !q.qu_time_limit_sec || q.qu_time_limit_sec === 0);
   
   console.log(`[사고력진단] 총 ${questions.length}개 문항 중 타이머 ${timerQuestions.length}개, 타이머 없음 ${noTimerQuestions.length}개`);
 
-  // 9. 응답 구성
+  // 10. 응답 구성
   const response: TestResponse = {
     anp_seq: context.anpSeq,
+    cr_seq: crSeq || undefined,
     pd_kind: context.accountStatus.pd_kind,
     qu_filename: questionFilename || '',
     qu_code: nextQuestion?.qu_code || '',

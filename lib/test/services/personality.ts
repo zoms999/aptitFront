@@ -5,7 +5,7 @@ import {
   getPersonalityQuestionsFallback, 
   getAllPersonalityQuestions 
 } from '../queries/personality';
-import { getProgressInfo } from '../utils';
+import { getProgressInfo, getCrSeq } from '../utils';
 
 /**
  * 성향진단 테스트 처리
@@ -57,15 +57,20 @@ export async function handlePersonalityTest(context: TestContext): Promise<TestR
   const progressInfo = await getProgressInfo(context.anpSeq);
   console.log(`[성향진단] 진행률 정보:`, progressInfo);
 
-  // 6. 타이머 통계
+  // 6. cr_seq 조회
+  const crSeq = await getCrSeq(context.anpSeq);
+  console.log(`[성향진단] cr_seq: ${crSeq}`);
+
+  // 7. 타이머 통계
   const timerQuestions = questions.filter(q => q.qu_time_limit_sec && q.qu_time_limit_sec > 0);
   const noTimerQuestions = questions.filter(q => !q.qu_time_limit_sec || q.qu_time_limit_sec === 0);
   
   console.log(`[성향진단] 총 ${questions.length}개 문항 중 타이머 ${timerQuestions.length}개, 타이머 없음 ${noTimerQuestions.length}개`);
 
-  // 7. 응답 구성
+  // 8. 응답 구성
   const response: TestResponse = {
     anp_seq: context.anpSeq,
+    cr_seq: crSeq || undefined,
     pd_kind: context.accountStatus.pd_kind,
     qu_filename: questionFilename || '',
     qu_code: nextQuestion?.qu_code || '',

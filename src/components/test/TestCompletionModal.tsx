@@ -1,9 +1,20 @@
 interface TestCompletionModalProps {
   onNextStep: () => void;
   currentStep?: string;
+  cr_seq?: string | number; // 검사 결과 시퀀스 번호
 }
 
-export default function TestCompletionModal({ onNextStep, currentStep = 'tnd' }: TestCompletionModalProps) {
+export default function TestCompletionModal({ onNextStep, currentStep = 'tnd', cr_seq }: TestCompletionModalProps) {
+  const handleButtonClick = () => {
+    // 마지막 단계(img)이고 cr_seq가 있으면 결과 페이지로 이동
+    if (currentStep === 'img' && cr_seq) {
+      window.location.href = `/test-result/${cr_seq}`;
+    } else {
+      // 그 외의 경우는 기존 로직 사용
+      onNextStep();
+    }
+  };
+
   const getStepInfo = (step: string) => {
     switch (step) {
       case 'tnd':
@@ -57,7 +68,7 @@ export default function TestCompletionModal({ onNextStep, currentStep = 'tnd' }:
           {stepInfo.subtitle}
         </p>
         <button
-          onClick={onNextStep}
+          onClick={handleButtonClick}
           className={`px-8 py-4 bg-gradient-to-r ${stepInfo.bgGradient} text-white font-bold rounded-2xl hover:shadow-2xl transition-all duration-300 hover:scale-105 flex items-center shadow-xl`}
         >
           <span className="text-lg mr-3">{stepInfo.nextText}</span>

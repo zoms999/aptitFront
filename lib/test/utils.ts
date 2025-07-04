@@ -265,4 +265,21 @@ export async function getProgressInfo(anpSeq: number): Promise<{ completed: numb
   }
 
   return { completed: 0, total: 0, step: 'tnd' };
+}
+
+/**
+ * anp_seq로부터 cr_seq를 조회합니다
+ */
+export async function getCrSeq(anpSeq: number): Promise<number | null> {
+  const crSeqResult = await prisma.$queryRaw`
+    SELECT cr_seq
+    FROM mwd_answer_progress
+    WHERE anp_seq = ${anpSeq}
+  ` as Array<{ cr_seq: number }>;
+
+  if (Array.isArray(crSeqResult) && crSeqResult.length > 0) {
+    return crSeqResult[0].cr_seq;
+  }
+
+  return null;
 } 

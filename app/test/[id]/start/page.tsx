@@ -30,6 +30,7 @@ interface TestStartPageProps {
 
 interface TestData {
   anp_seq: number;
+  cr_seq?: number; // 검사 결과 시퀀스 번호
   pd_kind: string;
   qu_code: string;
   qu_filename: string;
@@ -632,6 +633,7 @@ export default function TestStartPage({ params }: TestStartPageProps) {
             <TestCompletionModal 
               onNextStep={handleNextQuestion} 
               currentStep={testData.prev_step || testData.step}
+              cr_seq={testData.cr_seq}
             />
           ) : testData && testData.questions && testData.questions.length > 0 ? (
             <>
