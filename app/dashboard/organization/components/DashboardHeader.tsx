@@ -4,9 +4,14 @@ import { BuildingOfficeIcon, CreditCardIcon } from './icons';
 interface DashboardHeaderProps {
   instituteName: string;
   onPayment: () => void;
+  isOrganizationAdmin?: boolean;
 }
 
-const DashboardHeader: React.FC<DashboardHeaderProps> = ({ instituteName, onPayment }) => (
+const DashboardHeader: React.FC<DashboardHeaderProps> = ({ 
+  instituteName, 
+  onPayment, 
+  isOrganizationAdmin = false 
+}) => (
   <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-white/20 p-8 hover:shadow-2xl transition-all duration-300 animate-fade-in">
     <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between">
       <div className="mb-6 lg:mb-0">
@@ -22,13 +27,15 @@ const DashboardHeader: React.FC<DashboardHeaderProps> = ({ instituteName, onPaym
           </div>
         </div>
       </div>
-      <button
-        onClick={onPayment}
-        className="px-8 py-4 bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-medium rounded-xl hover:from-emerald-600 hover:to-teal-700 transition-all duration-200 shadow-lg hover:shadow-xl flex items-center transform hover:scale-105"
-      >
-        <CreditCardIcon className="w-5 h-5 mr-2" />
-        결제하기
-      </button>
+      {isOrganizationAdmin && (
+        <button
+          onClick={onPayment}
+          className="px-8 py-4 bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-medium rounded-xl hover:from-emerald-600 hover:to-teal-700 transition-all duration-200 shadow-lg hover:shadow-xl flex items-center transform hover:scale-105"
+        >
+          <CreditCardIcon className="w-5 h-5 mr-2" />
+          결제하기
+        </button>
+      )}
     </div>
   </div>
 );

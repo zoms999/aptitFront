@@ -94,6 +94,7 @@ export default function OrganizationDashboard() {
           <DashboardHeader 
             instituteName={instituteInfo?.ins_name}
             onPayment={handlePayment}
+            isOrganizationAdmin={isOrganizationAdmin}
           />
           
           <InstituteInfoCard 
