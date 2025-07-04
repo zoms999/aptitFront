@@ -14,7 +14,7 @@ import DetailedPersonalityTab from '@/components/results/DetailedPersonalityTab'
 import JobRecommendationTab from '@/components/results/JobRecommendationTab';
 import PlaceholderTab from '@/components/results/PlaceholderTab';
 import LearningStyleTab from '@/components/results/LearningStyleTab';
-import { mockFullResult, TestResult } from '@/data/mockResult'; // 목업 데이터 분리
+import { TestResult } from '@/data/mockResult'; // 목업 데이터 분리
 
 export default function TestResultPage() {
   const params = useParams();
@@ -58,8 +58,14 @@ export default function TestResultPage() {
   const fetchTestResult = async () => {
     try {
       setLoading(true);
-      // 실제 API 호출 대신 상세 목업 데이터 사용
-      setTestResult(mockFullResult);
+      const response = await fetch(`/api/test-result/${cr_seq}`);
+      const result = await response.json();
+
+      if (result.success) {
+        setTestResult(result.data);
+      } else {
+        throw new Error(result.message || '결과를 가져오는데 실패했습니다.');
+      }
     } catch (err) {
       console.error('Test result fetch error:', err);
       setError(err instanceof Error ? err.message : '결과를 가져오는데 실패했습니다');
@@ -116,25 +122,27 @@ export default function TestResultPage() {
   }
 
   const renderTabContent = () => {
+    if (!testResult) return null;
+
     switch (activeTab) {
       case '개인정보':
-        return <PersonalInfoTab result={testResult} />;
+        return <PersonalInfoTab result={{ personalInfo: testResult.personalInfo, pe_name: testResult.pe_name }} />;
       case '성향진단':
-        return <PersonalityAnalysisTab result={testResult.personalityAnalysis} />;
+        // PersonalityAnalysisTab은 이제 personalInfo와 tendency 관련 데이터를 모두 필요로 합니다.
+        return <PersonalityAnalysisTab result={testResult} />;
       case '세부성향분석':
         return <DetailedPersonalityTab result={testResult.detailedPersonality} />;
       case '학습법분석':
         return <LearningStyleTab result={testResult.learningStyle} />;
       case '성향적합직업학과':
-        return <JobRecommendationTab title="성향 기반 추천" recommendations={testResult.recommendations.byPersonality} />;
+        return <JobRecommendationTab title="성향 기반 추천" recommendations={testResult.recommendations?.byPersonality || []} />;
       case '역량적합직업학과':
-        return <JobRecommendationTab title="역량 기반 추천" recommendations={testResult.recommendations.byCompetency} />;
+        return <JobRecommendationTab title="역량 기반 추천" recommendations={testResult.recommendations?.byCompetency || []} />;
       case '성향적합교과목':
-        return <JobRecommendationTab title="성향 기반 추천 교과목" recommendations={testResult.recommendations.subjectsByPersonality} iconType="subject" />;
+        return <JobRecommendationTab title="성향 기반 추천 교과목" recommendations={testResult.recommendations?.subjectsByPersonality || []} iconType="subject" />;
       case '역량적합교과목':
-        return <JobRecommendationTab title="역량 기반 추천 교과목" recommendations={testResult.recommendations.subjectsByCompetency} iconType="subject" />;
+        return <JobRecommendationTab title="역량 기반 추천 교과목" recommendations={testResult.recommendations?.subjectsByCompetency || []} iconType="subject" />;
       default:
-        // 나머지 탭들은 Placeholder 컴포넌트로 대체하여 보여줍니다.
         return <PlaceholderTab title={activeTab} />;
     }
   };
