@@ -1,5 +1,12 @@
 // data/mockResult.ts
 
+interface DetailedPersonalityAnalysis {
+  qu_explain: string;
+  rank: number;
+  an_wei?: number;
+  qua_code?: string;
+}
+
 export interface TestResult {
   cr_seq: number;
   pd_name: string;
@@ -7,6 +14,7 @@ export interface TestResult {
   // ... 기타 개인정보
   personalityAnalysis: any;
   detailedPersonality: any;
+  detailedPersonalityAnalysis?: DetailedPersonalityAnalysis[];
   learningStyle: any;
   recommendations: any;
 }

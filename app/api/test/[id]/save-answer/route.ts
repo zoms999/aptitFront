@@ -6,6 +6,7 @@ import {
   calculatePersonalityResults, 
   calculateThinkingResults, 
   calculatePreferenceResults, 
+  calculateTalentResults,
   calculateFinalResults 
 } from '../../../../../lib/test/services/results';
 
@@ -13,6 +14,15 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  let requestData: {
+    anp_seq?: number;
+    qu_code?: string;
+    an_val?: number;
+    an_wei?: number;
+    step?: string;
+    isStartPage?: boolean;
+  } = {};
+  
   try {
     // 로그인 세션 확인
     const session = await getServerSession(authOptions);
@@ -36,52 +46,249 @@ export async function POST(
     }
 
     // 요청 본문에서 데이터 파싱
-    const requestData = await request.json();
-    const { anp_seq, qu_code, an_val, an_wei, step } = requestData;
+    requestData = await request.json();
+    const { anp_seq, qu_code, an_val, an_wei, step, isStartPage } = requestData;
 
-    if (!anp_seq || !qu_code || an_val === undefined) {
+    // 시작 페이지가 아닐 때만 qu_code 검증
+    if (!anp_seq || (!qu_code && !isStartPage) || an_val === undefined) {
+      console.log('[DEBUG] 필수 파라미터 검증 실패:', {
+        anp_seq: anp_seq,
+        qu_code: qu_code,
+        an_val: an_val,
+        an_val_type: typeof an_val,
+        an_val_undefined: an_val === undefined,
+        isStartPage: isStartPage
+      });
       return NextResponse.json({ error: '필수 파라미터가 누락되었습니다' }, { status: 400 });
     }
 
     console.log('[DEBUG] 답변 저장 파라미터:', {
       anp_seq,
-      qu_code,
+      qu_code: qu_code || '(빈 문자열)',
+      qu_code_length: qu_code ? qu_code.length : 0,
       an_val,
       an_wei,
-      step
+      step,
+      isStartPage
     });
 
-    // 1. 답변 저장 (이미 존재하는 경우 업데이트, 없는 경우 삽입)
-    // an_ex 컬럼이 integer 타입이므로 text 캐스팅 제거
-    await prisma.$queryRaw`
-      INSERT INTO mwd_answer (anp_seq, qu_code, an_ex, an_wei, an_progress)
-      VALUES (${anp_seq}::integer, ${qu_code}, ${an_val}::integer, ${an_wei || 0}::integer, 
-        (SELECT COALESCE(MAX(an_progress), 0) + 1 
-         FROM mwd_answer 
-         WHERE anp_seq = ${anp_seq}::integer))
-      ON CONFLICT (anp_seq, qu_code) 
-      DO UPDATE SET 
-        an_ex = ${an_val}::integer,
-        an_wei = ${an_wei || 0}::integer
-    `;
+    // 1. 답변 저장 (시작 페이지가 아닌 경우만)
+    if (!isStartPage) {
+      // an_ex 컬럼이 integer 타입이므로 text 캐스팅 제거
+      await prisma.$queryRaw`
+        INSERT INTO mwd_answer (anp_seq, qu_code, an_ex, an_wei, an_progress)
+        VALUES (${anp_seq}::integer, ${qu_code}, ${an_val}::integer, ${an_wei || 0}::integer, 
+          (SELECT COALESCE(MAX(an_progress), 0) + 1 
+           FROM mwd_answer 
+           WHERE anp_seq = ${anp_seq}::integer))
+        ON CONFLICT (anp_seq, qu_code) 
+        DO UPDATE SET 
+          an_ex = ${an_val}::integer,
+          an_wei = ${an_wei || 0}::integer
+      `;
+    } else {
+      console.log('[DEBUG] 시작 페이지이므로 답변 저장 건너뜀');
+    }
 
     // 2. 진행 상태 업데이트
-    await prisma.$queryRaw`
-      UPDATE mwd_answer_progress
-      SET qu_code = ${qu_code},
-          anp_done = 'I',
-          anp_step = ${step}
-      WHERE anp_seq = ${anp_seq}::integer
+    if (isStartPage) {
+      // 시작 페이지인 경우 실제 첫 번째 문제로 qu_code 업데이트
+      console.log('[DEBUG] 시작 페이지에서 실제 첫 번째 문제로 전환');
+      console.log('[DEBUG] 현재 qu_code:', qu_code, '타입:', typeof qu_code);
+      
+      let firstQuCode = qu_code; // 기본값으로 현재 qu_code 사용
+      
+      // 데이터베이스에서 해당 단계의 실제 첫 번째 문제 조회
+      try {
+        const firstQuestionResult = await prisma.$queryRaw`
+          SELECT qu_code
+          FROM mwd_question
+          WHERE qu_kind1 = ${step}
+            AND qu_use = 'Y'
+            AND qu_filename NOT LIKE '%Index%'
+            AND qu_filename NOT LIKE '%index%'
+           ORDER BY qu_filename ASC
+          LIMIT 1
+        `;
+        
+        if (Array.isArray(firstQuestionResult) && firstQuestionResult.length > 0) {
+          firstQuCode = firstQuestionResult[0].qu_code;
+          console.log(`[DEBUG] DB에서 조회한 첫 번째 문제: ${firstQuCode}`);
+        } else {
+          console.error(`[DEBUG] ${step} 단계의 첫 번째 문제를 찾을 수 없음`);
+          throw new Error(`No questions found for step: ${step}`);
+        }
+      } catch (dbError) {
+        console.error('[DEBUG] DB 조회 실패, 폴백 사용:', dbError);
+        // 폴백: 기존 하드코딩된 값들
+        if (step === 'thk') {
+          firstQuCode = 'thk01010';
+        } else if (step === 'img') {
+          firstQuCode = 'img11010'; 
+        } else if (step === 'tnd') {
+          firstQuCode = 'tnd01010';
+        } else {
+          console.error('[DEBUG] 알 수 없는 단계:', step);
+          firstQuCode = 'tnd01010'; // 기본값
+        }
+      }
+      
+      console.log(`[DEBUG] 첫 번째 실제 문제: ${firstQuCode} (단계: ${step})`);
+      
+      // 업데이트 전 현재 상태 확인
+      const beforeUpdate = await prisma.$queryRaw`
+        SELECT anp_seq, qu_code, anp_step, anp_done 
+        FROM mwd_answer_progress 
+        WHERE anp_seq = ${anp_seq}::integer
+      `;
+      console.log('[DEBUG] 업데이트 전 상태:', beforeUpdate);
+      
+      await prisma.$queryRaw`
+        UPDATE mwd_answer_progress
+        SET qu_code = ${firstQuCode},
+            anp_done = 'I',
+            anp_step = ${step}
+        WHERE anp_seq = ${anp_seq}::integer
+      `;
+      
+      // 업데이트 후 상태 확인
+      const afterUpdate = await prisma.$queryRaw`
+        SELECT anp_seq, qu_code, anp_step, anp_done 
+        FROM mwd_answer_progress 
+        WHERE anp_seq = ${anp_seq}::integer
+      `;
+      console.log('[DEBUG] 업데이트 후 상태:', afterUpdate);
+    } else {
+      // 일반 문제 진행 시에도 qu_code 유효성 재확인
+      if (!qu_code || qu_code.trim() === '') {
+        console.error('[DEBUG] 일반 문제 진행 중 qu_code가 비어있음:', qu_code);
+        return NextResponse.json({ error: '문제 코드가 유효하지 않습니다' }, { status: 400 });
+      }
+      
+      await prisma.$queryRaw`
+        UPDATE mwd_answer_progress
+        SET qu_code = ${qu_code},
+            anp_done = 'I',
+            anp_step = ${step}
+        WHERE anp_seq = ${anp_seq}::integer
+      `;
+    }
+
+    // 2.5. 단계 완료 여부 먼저 확인하고 필요시 단계 전환 처리
+    const stepCompletionCheck = await prisma.$queryRaw`
+      WITH current_progress_details AS (
+        SELECT
+            ap.anp_seq,
+            ap.anp_step,
+            ap.ac_gid,
+            ap.cr_seq,
+            cr.pd_kind
+        FROM mwd_answer_progress ap
+        JOIN mwd_choice_result cr ON cr.ac_gid = ap.ac_gid AND cr.cr_seq = ap.cr_seq
+        WHERE ap.anp_seq = ${anp_seq}::integer
+        LIMIT 1
+      ),
+      total_questions_for_step AS (
+        SELECT
+            COUNT(qu.qu_code) AS tcnt,
+            cpd.anp_step AS step
+        FROM mwd_question qu
+        JOIN current_progress_details cpd ON qu.qu_kind1 = cpd.anp_step
+        WHERE qu.qu_use = 'Y'
+          AND qu.qu_qusyn = 'Y'
+        GROUP BY cpd.anp_step
+      ),
+      answered_questions_for_step AS (
+        SELECT
+            COUNT(an.qu_code) AS acnt
+        FROM mwd_answer an
+        JOIN mwd_question qu ON qu.qu_code = an.qu_code
+        JOIN current_progress_details cpd ON an.anp_seq = cpd.anp_seq AND qu.qu_kind1 = cpd.anp_step
+        WHERE an.an_progress > 0
+          AND an.an_ex >= 0
+          AND qu.qu_use = 'Y'
+          AND qu.qu_qusyn = 'Y'
+      )
+      SELECT
+          COALESCE(tqs.tcnt, 0) AS tcnt,
+          COALESCE(aqs.acnt, 0) AS acnt,
+          cpd.anp_step AS step
+      FROM current_progress_details cpd
+      LEFT JOIN total_questions_for_step tqs ON cpd.anp_step = tqs.step
+      LEFT JOIN answered_questions_for_step aqs ON 1=1
     `;
 
+    // 단계 완료 시 즉시 다음 단계로 전환
+    if (Array.isArray(stepCompletionCheck) && stepCompletionCheck.length > 0) {
+      const { tcnt, acnt, step: currentStep } = stepCompletionCheck[0];
+      
+      if (Number(acnt) >= Number(tcnt)) {
+        console.log(`🔄 [단계 전환] ${currentStep} 단계 완료됨 (${acnt}/${tcnt}), 다음 단계로 전환 시작`);
+        
+        try {
+                     // 각 단계별 결과 계산
+           if (currentStep === 'tnd') {
+             await calculatePersonalityResults(anp_seq);
+             
+             // 사고력 진단 시작 전 안내 페이지로 전환
+             await prisma.$queryRaw`
+               UPDATE mwd_answer_progress 
+               SET qu_code = 'thk00000', 
+                   anp_done = 'I', 
+                   anp_step = 'thk' 
+               WHERE anp_seq = ${anp_seq}::integer
+             `;
+             console.log('✅ [단계 전환] 성향진단 → 사고력진단 시작 안내 페이지');
+             
+           } else if (currentStep === 'thk') {
+             await calculateThinkingResults(anp_seq);
+             
+             // 선호도 진단 시작 전 안내 페이지로 전환
+             await prisma.$queryRaw`
+               UPDATE mwd_answer_progress 
+               SET qu_code = 'img00000', 
+                   anp_done = 'I', 
+                   anp_step = 'img' 
+               WHERE anp_seq = ${anp_seq}::integer
+             `;
+             console.log('✅ [단계 전환] 사고력진단 → 선호도진단 시작 안내 페이지');
+            
+          } else if (currentStep === 'img') {
+            await calculatePreferenceResults(anp_seq);
+            
+            // 최종 결과 계산
+            try {
+              await calculateFinalResults(anp_seq);
+              console.log('✅ [최종 결과] 계산 완료');
+            } catch (finalError) {
+              console.error('❌ [최종 결과] 계산 중 오류:', finalError);
+            }
+            
+            // 전체 테스트 완료 처리
+            await prisma.$queryRaw`
+              UPDATE mwd_answer_progress 
+              SET anp_done = 'E', 
+                  anp_end_date = NOW() 
+              WHERE anp_seq = ${anp_seq}::integer
+            `;
+            console.log('✅ [단계 전환] 선호도진단 → 전체 완료');
+          }
+        } catch (error) {
+          console.error(`❌ [단계 전환] ${currentStep} 처리 중 오류:`, error);
+        }
+      }
+    }
+
     // 3. 현재 단계 완료 여부 확인 및 다음 질문 추출
+    console.log('[DEBUG] 다음 문제 조회 시작 - anp_seq:', anp_seq);
+    
     const nextQuestionResult = await prisma.$queryRaw`
       WITH progress_list AS (
           SELECT  
               ap.anp_seq, 
               qu.qu_code, 
               qu.qu_filename,
-              ROW_NUMBER() OVER (ORDER BY co.coc_order, qu.qu_kind2, qu_order) AS progress,
+              ROW_NUMBER() OVER (ORDER BY qu.qu_filename ASC) AS progress,
               qu.qu_kind1 AS step, 
               qu.qu_action, 
               COALESCE(qa.qua_type, '-') AS qua_type, 
@@ -125,202 +332,30 @@ export async function POST(
     let nextQuestion = null;
     let isStepCompleted = false;
     
+    console.log('[DEBUG] 다음 문제 조회 결과:', nextQuestionResult);
+    
     if (Array.isArray(nextQuestionResult) && nextQuestionResult.length > 0) {
       nextQuestion = nextQuestionResult[0];
+      console.log('[DEBUG] 다음 문제 발견:', nextQuestion);
     } else {
       // 현재 단계에서 다음 질문이 없는 경우, 단계 완료 확인
       console.log('현재 단계에서 다음 질문이 없음. 단계 완료 여부 확인 중...');
-      
-      // 성향 진단(tnd) 완료 후 사고력 진단(thk)으로 전환
-      if (step === 'tnd') {
-        console.log('🎯 [성향진단 완료] 사고력 진단으로 전환 시도...');
-        
-        // 💾 성향 진단 결과 계산 및 저장
-        try {
+      try {
+        if (step === 'tnd') {
           await calculatePersonalityResults(anp_seq);
-        } catch (scoreError) {
-          console.error('❌ [성향진단 결과] 계산 중 오류:', scoreError);
-          // 결과 계산 실패해도 다음 단계로 진행
-        }
-        
-        // 사고력 진단의 첫 번째 문항 조회
-        const thinkingQuestionResult = await prisma.$queryRaw`
-          SELECT 
-              qu.qu_filename, 
-              qu.qu_code, 
-              qu.qu_kind1 AS step,
-              'tnd' AS prev_step,
-              qu.qu_action, 
-              ${qu_code} AS prev_code, 
-              COALESCE(qa.qua_type, '-') AS qua_type, 
-              cr.pd_kind
-          FROM mwd_question qu
-          JOIN mwd_choice_result cr ON cr.cr_seq = (
-              SELECT cr_seq FROM mwd_answer_progress WHERE anp_seq = ${anp_seq}::integer
-          )
-          LEFT JOIN mwd_question_attr qa ON qa.qua_code = 
-              CASE WHEN qu.qu_kind1 = 'img' THEN qu.qu_kind3 ELSE qu.qu_kind2 END
-          WHERE qu.qu_use = 'Y'
-            AND qu.qu_kind1 = 'thk'
-            AND qu.qu_filename NOT LIKE '%Index%'
-            AND qu.qu_filename NOT LIKE '%index%'
-          ORDER BY qu.qu_filename, qu.qu_order
-          LIMIT 1
-        `;
-        
-        if (Array.isArray(thinkingQuestionResult) && thinkingQuestionResult.length > 0) {
-          nextQuestion = thinkingQuestionResult[0];
-          console.log('🎯 [성향진단 완료] 사고력 진단 첫 문항 찾음:', nextQuestion);
-          
-          // answer_progress의 단계를 사고력 진단으로 업데이트
-          await prisma.$queryRaw`
-            UPDATE mwd_answer_progress
-            SET anp_step = 'thk',
-                qu_code = ${nextQuestion.qu_code}
-            WHERE anp_seq = ${anp_seq}::integer
-          `;
-          
-          console.log('✅ [성향진단 완료] answer_progress 테이블 업데이트 완료: anp_step=thk, qu_code=', nextQuestion.qu_code);
-          
-          // 성향 진단 완료 상태로 설정하여 안내페이지가 나타나도록 함
-          isStepCompleted = true;
-          console.log('✅ [성향진단 완료] 성향 진단 완료 상태로 설정 - 안내페이지 표시');
-        } else {
-          isStepCompleted = true;
-          console.log('⚠️ [성향진단 완료] 성향 진단 완료 - 사고력 진단 문항 없음');
-        }
-      } else if (step === 'thk') {
-        // 사고력 진단에서 현재 파일명의 문제가 완료되면 다음 파일명의 문제로 진행
-        console.log('사고력 진단에서 다음 파일명의 문제 조회 시도...');
-        
-        // 현재 문제의 파일명 가져오기
-        const currentFilenameResult = await prisma.$queryRaw`
-          SELECT qu_filename FROM mwd_question WHERE qu_code = ${qu_code} AND qu_use = 'Y'
-        `;
-        
-        let currentFilename = '';
-        if (Array.isArray(currentFilenameResult) && currentFilenameResult.length > 0) {
-          currentFilename = currentFilenameResult[0].qu_filename;
-        }
-        
-        console.log(`[사고력 진단 디버깅] 현재 문항: ${qu_code}, 현재 파일명: ${currentFilename}`);
-        
-        // 사고력 진단의 다음 파일명 문제 조회
-        const nextThinkingQuestionResult = await prisma.$queryRaw`
-          SELECT 
-              qu.qu_filename, 
-              qu.qu_code, 
-              qu.qu_kind1 AS step,
-              'thk' AS prev_step,
-              qu.qu_action, 
-              ${qu_code} AS prev_code, 
-              COALESCE(qa.qua_type, '-') AS qua_type, 
-              cr.pd_kind
-          FROM mwd_question qu
-          JOIN mwd_choice_result cr ON cr.cr_seq = (
-              SELECT cr_seq FROM mwd_answer_progress WHERE anp_seq = ${anp_seq}::integer
-          )
-          LEFT JOIN mwd_question_attr qa ON qa.qua_code = 
-              CASE WHEN qu.qu_kind1 = 'img' THEN qu.qu_kind3 ELSE qu.qu_kind2 END
-          WHERE qu.qu_use = 'Y'
-            AND qu.qu_kind1 = 'thk'
-            AND qu.qu_filename NOT LIKE '%Index%'
-            AND qu.qu_filename NOT LIKE '%index%'
-            AND qu.qu_filename > ${currentFilename}
-          ORDER BY qu.qu_filename, qu.qu_order
-          LIMIT 1
-        `;
-        
-        console.log(`[사고력 진단 디버깅] 다음 문항 검색 결과:`, nextThinkingQuestionResult);
-        
-        if (Array.isArray(nextThinkingQuestionResult) && nextThinkingQuestionResult.length > 0) {
-          nextQuestion = nextThinkingQuestionResult[0];
-          console.log('사고력 진단 다음 파일명 문항 찾음:', nextQuestion);
-          
-          // answer_progress 업데이트
-          await prisma.$queryRaw`
-            UPDATE mwd_answer_progress
-            SET qu_code = ${nextQuestion.qu_code}
-            WHERE anp_seq = ${anp_seq}::integer
-          `;
-        } else {
-          // 사고력 진단 완료 후 선호도 진단(img)으로 전환
-          console.log('🎯 [사고력진단 완료] 선호도 진단으로 전환 시도...');
-          
-          // 💾 사고력 진단 결과 계산 및 저장
-          try {
-            await calculateThinkingResults(anp_seq);
-          } catch (scoreError) {
-            console.error('❌ [사고력진단 결과] 계산 중 오류:', scoreError);
-            // 결과 계산 실패해도 다음 단계로 진행
-          }
-          
-          const preferenceQuestionResult = await prisma.$queryRaw`
-            SELECT 
-                qu.qu_filename, 
-                qu.qu_code, 
-                qu.qu_kind1 AS step,
-                'thk' AS prev_step,
-                qu.qu_action, 
-                ${qu_code} AS prev_code, 
-                COALESCE(qa.qua_type, '-') AS qua_type, 
-                cr.pd_kind
-            FROM mwd_question qu
-            JOIN mwd_choice_result cr ON cr.cr_seq = (
-                SELECT cr_seq FROM mwd_answer_progress WHERE anp_seq = ${anp_seq}::integer
-            )
-            LEFT JOIN mwd_question_attr qa ON qa.qua_code = 
-                CASE WHEN qu.qu_kind1 = 'img' THEN qu.qu_kind3 ELSE qu.qu_kind2 END
-            WHERE qu.qu_use = 'Y'
-              AND qu.qu_kind1 = 'img'
-              AND qu.qu_filename NOT LIKE '%Index%'
-              AND qu.qu_filename NOT LIKE '%index%'
-            ORDER BY qu.qu_filename, qu.qu_order
-            LIMIT 1
-          `;
-          
-          if (Array.isArray(preferenceQuestionResult) && preferenceQuestionResult.length > 0) {
-            nextQuestion = preferenceQuestionResult[0];
-            console.log('🎯 [사고력진단 완료] 선호도 진단 첫 문항 찾음:', nextQuestion);
-            
-            // answer_progress의 단계를 선호도 진단으로 업데이트
-            await prisma.$queryRaw`
-              UPDATE mwd_answer_progress
-              SET anp_step = 'img',
-                  qu_code = ${nextQuestion.qu_code}
-              WHERE anp_seq = ${anp_seq}::integer
-            `;
-            
-            // 사고력 진단 완료 상태로 설정하여 안내페이지가 나타나도록 함
-            isStepCompleted = true;
-            console.log('✅ [사고력진단 완료] 사고력 진단 완료 상태로 설정 - 안내페이지 표시');
-          } else {
-            isStepCompleted = true;
-            console.log('⚠️ [사고력진단 완료] 사고력 진단 완료 - 선호도 진단 문항 없음');
-          }
-        }
-      } else if (step === 'img') {
-        // 선호도 진단 완료 처리
-        console.log('🎯 [선호도진단 완료] 전체 테스트 완료 처리 시작...');
-        
-        // 💾 선호도 진단 결과 계산 및 저장
-        try {
+        } else if (step === 'thk') {
+          await calculateThinkingResults(anp_seq);
+        } else if (step === 'tal') {
+          await calculateTalentResults(anp_seq);
+        } else if (step === 'img') {
           await calculatePreferenceResults(anp_seq);
-          // 최종 종합 결과도 계산
-          await calculateFinalResults(anp_seq);
-        } catch (scoreError) {
-          console.error('❌ [선호도진단 결과] 계산 중 오류:', scoreError);
-          // 결과 계산 실패해도 완료 처리 계속
         }
-        
-        // 모든 단계 완료
-        isStepCompleted = true;
-        console.log('✅ [선호도진단 완료] 선호도 진단 완료 - 전체 테스트 완료');
-      } else {
-        // 기타 모든 단계 완료
-        isStepCompleted = true;
-        console.log('모든 단계 완료');
+      } catch (scoreError) {
+        console.error(`[${step} 결과] 계산 중 오류:`, scoreError);
+        // 결과 계산 실패해도 다음 단계로 진행
       }
+      isStepCompleted = true;
+      console.log(`✅ [${step} 완료] 단계 완료 상태로 설정 - 안내페이지 표시`);
     }
 
     // 4. 완료율 계산
@@ -667,17 +702,6 @@ export async function POST(
 
     // 완료 상태 확인
     const isCompleted = !nextQuestion;
-    
-    // 전체 테스트 완료 시에만 기본 완료 처리
-    if (isCompleted) {
-      await prisma.$queryRaw`
-        UPDATE mwd_answer_progress
-        SET anp_done = 'E',
-            anp_end_date = NOW()
-        WHERE anp_seq = ${anp_seq}::integer
-      `;
-      console.log('전체 테스트 완료 처리됨');
-    }
 
     // BigInt 직렬화 오류 해결을 위한 헬퍼 함수
     const prepareBigIntForJSON = (data: unknown): unknown => {
@@ -704,6 +728,22 @@ export async function POST(
       return data;
     };
 
+    // cr_seq 조회 (전체 검사 완료 시 결과 페이지 이동을 위함)
+    let crSeq = null;
+    if (isStepCompleted && step === 'img') {
+      const crSeqResult = await prisma.$queryRaw`
+        SELECT cr_seq 
+        FROM mwd_answer_progress 
+        WHERE anp_seq = ${anp_seq}::integer
+        LIMIT 1
+      `;
+      
+      if (Array.isArray(crSeqResult) && crSeqResult.length > 0) {
+        crSeq = crSeqResult[0].cr_seq;
+        console.log('✅ [전체검사 완료] cr_seq 조회:', crSeq);
+      }
+    }
+
     // ResponseData 처리 시 BigInt 변환
     const responseData = prepareBigIntForJSON({
       success: true,
@@ -715,111 +755,26 @@ export async function POST(
       questions,
       // 현재 페이지와 총 문항 수 정보 추가
       completed_pages: Array.isArray(progressResult) && progressResult.length > 0 ? progressResult[0].acnt : 0,
-      total_questions: Array.isArray(progressResult) && progressResult.length > 0 ? progressResult[0].tcnt : 0
+      total_questions: Array.isArray(progressResult) && progressResult.length > 0 ? progressResult[0].tcnt : 0,
+      // 전체 검사 완료 시 cr_seq 추가
+      cr_seq: crSeq
     });
 
-    // 현재 단계 완료 여부 최종 확인 (모든 단계에 대해)
-    if (!isCompleted && !isStepCompleted) {
-      // BigInt 타입을 Number로 변환하여 처리
-      const completedPages = Array.isArray(progressResult) && progressResult.length > 0 
-        ? Number((progressResult[0] as { acnt: bigint | number }).acnt)
-        : 0;
-      
-      const totalQuestions = Array.isArray(progressResult) && progressResult.length > 0 
-        ? Number((progressResult[0] as { tcnt: bigint | number }).tcnt)
-        : 0;
-        
-      console.log(`단계 완료 체크 (${step}): 완료된 페이지 ${completedPages}, 총 문항 수 ${totalQuestions}`);
-      
-      // 현재 단계의 모든 문항이 완료된 경우
-      if (completedPages >= totalQuestions) {
-        console.log(`${step} 단계 모든 문항 완료됨, 다음 단계 전환 시작`);
-        
-        try {
-          if (step === 'tnd') {
-            // 성향 진단 완료 처리 (점수는 이미 앞에서 저장됨)
-            console.log('📝 [성향진단 완료 2차] 이미 점수 저장됨, 단계 전환만 처리');
-            
-            // 다음 단계(사고력 진단)로 업데이트
-            await prisma.$queryRaw`
-              UPDATE mwd_answer_progress 
-              SET qu_code = 'thk00000', 
-                  anp_done = 'I', 
-                  anp_step = 'thk' 
-              WHERE anp_seq = ${anp_seq}::integer
-            `;
-            
-            console.log('✅ [성향진단 완료 2차] 사고력 진단 단계로 업데이트 완료');
-            
-          } else if (step === 'thk') {
-            // 사고력 진단 완료 처리 (점수는 이미 앞에서 저장됨)
-            console.log('📝 [사고력진단 완료 2차] 이미 점수 저장됨, 단계 전환만 처리');
-            
-            // 선호도 진단으로 전환
-            await prisma.$queryRaw`
-              UPDATE mwd_answer_progress 
-              SET qu_code = 'img00000', 
-                  anp_done = 'I', 
-                  anp_step = 'img' 
-              WHERE anp_seq = ${anp_seq}::integer
-            `;
-            
-            console.log('✅ [사고력진단 완료 2차] 선호도 진단 단계로 업데이트 완료');
-            
-          } else if (step === 'img') {
-            // 선호도 진단 완료 처리 (점수는 이미 앞에서 저장됨)
-            console.log('📝 [선호도진단 완료 2차] 이미 점수 저장됨, 완료 처리만 실행');
-            
-            // 전체 테스트 완료 처리
-            await prisma.$queryRaw`
-              UPDATE mwd_answer_progress 
-              SET anp_done = 'E', 
-                  anp_end_date = NOW() 
-              WHERE anp_seq = ${anp_seq}::integer
-            `;
-            
-            console.log('✅ [선호도진단 완료 2차] 전체 테스트 완료 처리됨');
-          }
-          
-          // 응답 데이터에 단계 완료 플래그 및 다음 단계 정보 추가
-          (responseData as Record<string, unknown>).isStepCompleted = true;
-          
-          // 다음 단계 정보 설정
-          let nextStepInfo = null;
-          if (step === 'tnd') {
-            nextStepInfo = {
-              step: 'thk',
-              qu_code: 'thk00000',
-              qu_filename: 'thk00000',
-              prev_step: 'tnd'
-            };
-          } else if (step === 'thk') {
-            nextStepInfo = {
-              step: 'img',
-              qu_code: 'img00000', 
-              qu_filename: 'img00000',
-              prev_step: 'thk'
-            };
-          }
-          
-          if (nextStepInfo) {
-            (responseData as Record<string, unknown>).nextQuestion = nextStepInfo;
-            console.log(`다음 단계 정보 설정: ${step} -> ${nextStepInfo.step}`);
-          }
-          
-        } catch (error) {
-          console.error(`${step} 단계 완료 처리 중 오류:`, error);
-        }
-      }
-    }
+    // 중복 처리 로직 제거됨 (위에서 이미 단계 전환 처리 완료)
 
     console.log('답변 저장 완료');
     return NextResponse.json(responseData);
 
   } catch (error) {
     console.error('답변 저장 API 오류:', error);
+    console.error('오류 스택:', error instanceof Error ? error.stack : 'Stack not available');
+    console.error('요청 데이터:', requestData);
+    
     return NextResponse.json(
-      { error: '답변을 저장하는 중 오류가 발생했습니다' },
+      { 
+        error: '답변을 저장하는 중 오류가 발생했습니다',
+        details: error instanceof Error ? error.message : String(error)
+      },
       { status: 500 }
     );
   }

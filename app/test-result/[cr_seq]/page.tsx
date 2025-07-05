@@ -14,6 +14,8 @@ import DetailedPersonalityTab from '@/components/results/DetailedPersonalityTab'
 import JobRecommendationTab from '@/components/results/JobRecommendationTab';
 import PlaceholderTab from '@/components/results/PlaceholderTab';
 import LearningStyleTab from '@/components/results/LearningStyleTab';
+import ThinkingTab from '../../../components/results/ThinkingTab';
+import CompetencyTab from '../../../components/results/CompetencyTab';
 import { TestResult } from '@/data/mockResult'; // 목업 데이터 분리
 
 export default function TestResultPage() {
@@ -131,7 +133,11 @@ export default function TestResultPage() {
         // PersonalityAnalysisTab은 이제 personalInfo와 tendency 관련 데이터를 모두 필요로 합니다.
         return <PersonalityAnalysisTab result={testResult} />;
       case '세부성향분석':
-        return <DetailedPersonalityTab result={testResult.detailedPersonality} />;
+        return <DetailedPersonalityTab result={testResult} />;
+      case '사고력진단':
+        return <ThinkingTab result={testResult} />;
+      case '역량진단':
+        return <CompetencyTab result={testResult} />;
       case '학습법분석':
         return <LearningStyleTab result={testResult.learningStyle} />;
       case '성향적합직업학과':

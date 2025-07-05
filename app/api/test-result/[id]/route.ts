@@ -46,6 +46,20 @@ interface TendencyQuestionExplain {
   rank: number;
 }
 
+interface DetailedPersonalityAnalysis {
+  qu_explain: string;
+  rank: number;
+  an_wei: number;
+  qua_code: string;
+}
+
+interface TalentDetail {
+  qua_name: string;
+  tscore: number;
+  explain: string;
+  rank: number;
+}
+
 interface ThinkingMain {
   thkm: string;  // 주사고
   thks: string;  // 부사고
@@ -221,6 +235,19 @@ export async function GET(
       and an.an_wei >= 4 and qu.qu_kind2 = sc1.qua_code
       order by sc1.sc1_rank, an.an_wei desc
     `;
+
+    // 세부성향분석 조회
+    const detailedPersonalityAnalysisQuery = `
+      select qu.qu_explain, sc1.sc1_rank as rank, an.an_wei, sc1.qua_code
+      from mwd_answer an, mwd_question qu,
+      (select qua_code, sc1_rank from mwd_score1 sc1
+       where anp_seq = ${id} and sc1_step='tnd' and sc1_rank <= 3) sc1
+      where an.anp_seq = ${id}
+      and qu.qu_code = an.qu_code and qu.qu_use = 'Y'
+      and qu.qu_qusyn = 'Y' and qu.qu_kind1 = 'tnd'
+      and an.an_wei >= 4 and qu.qu_kind2 = sc1.qua_code
+      order by sc1.sc1_rank, an.an_wei desc
+    `;
     
     // 상위 성향 상세 설명 조회
     const topTendencyExplainQuery = `
@@ -378,6 +405,38 @@ export async function GET(
       JOIN mwd_choice_result cr ON anp.cr_seq = cr.cr_seq
       WHERE anp.anp_seq = ${id}
     `;
+
+    // 역량진단 상위 5개 조회
+    const talentListQuery = `
+      SELECT
+        string_agg(qa.qua_name, ', ' ORDER BY sc1.sc1_rank) AS tal
+      FROM
+        mwd_question_attr qa
+        JOIN mwd_score1 sc1 ON sc1.qua_code = qa.qua_code
+      WHERE
+        sc1.anp_seq = ${id}
+        AND sc1.sc1_step = 'tal'
+        AND sc1.sc1_rank <= 5
+    `;
+
+    // 역량진단 상세 정보 조회
+    const talentDetailsQuery = `
+      SELECT
+        qa.qua_name,
+        ROUND(sc1.sc1_rate * 100) AS tscore,
+        REPLACE(qe.que_explain, '당신', '${id}님') AS explain,
+        sc1.sc1_rank as rank
+      FROM
+        mwd_score1 sc1
+        JOIN mwd_question_attr qa ON qa.qua_code = sc1.qua_code
+        JOIN mwd_question_explain qe ON qe.qua_code = qa.qua_code
+      WHERE
+        sc1.anp_seq = ${id}
+        AND sc1.sc1_step = 'tal'
+        AND sc1.sc1_rank <= 60
+      ORDER BY
+        sc1.sc1_rank
+    `;
     
 
     
@@ -402,6 +461,9 @@ export async function GET(
     
     console.log("[SQL] tendencyQuestionExplainQuery:", tendencyQuestionExplainQuery);
     const tendencyQuestionExplains = await db.$queryRawUnsafe(tendencyQuestionExplainQuery) as TendencyQuestionExplain[];
+    
+    console.log("[SQL] detailedPersonalityAnalysisQuery:", detailedPersonalityAnalysisQuery);
+    const detailedPersonalityAnalysis = await db.$queryRawUnsafe(detailedPersonalityAnalysisQuery) as DetailedPersonalityAnalysis[];
     
     console.log("[SQL] topTendencyExplainQuery:", topTendencyExplainQuery);
     const topTendencyExplains = await db.$queryRawUnsafe(topTendencyExplainQuery) as TendencyDetailExplain[];
@@ -432,6 +494,12 @@ export async function GET(
     
     console.log("[SQL] pdKindQuery:", pdKindQuery);
     const pdKindResult = await db.$queryRawUnsafe(pdKindQuery) as { pd_kind: string }[];
+
+    console.log("[SQL] talentListQuery:", talentListQuery);
+    const talentListResult = await db.$queryRawUnsafe(talentListQuery) as { tal: string }[];
+
+    console.log("[SQL] talentDetailsQuery:", talentDetailsQuery);
+    const talentDetailsResult = await db.$queryRawUnsafe(talentDetailsQuery) as TalentDetail[];
     
     // 로그 기록 (에러가 나도 응답에 영향을 주지 않도록 try-catch로 처리)
     
@@ -448,6 +516,7 @@ export async function GET(
         tendencyQuestionExplains,
         topTendencyExplains,
         bottomTendencyExplains,
+        detailedPersonalityAnalysis,
         thinkingMain: thinkingMain[0],
         thinkingScore: thinkingScore[0],
         thinkingDetails,
@@ -455,7 +524,9 @@ export async function GET(
         suitableJobsDetail,
         suitableJobMajors,
         imagePreference: imagePreference[0],
-        pd_kind: pdKindResult?.[0]?.pd_kind || 'basic' // pd_kind가 없을 경우 기본값으로 'basic' 설정
+        pd_kind: pdKindResult?.[0]?.pd_kind || 'basic', // pd_kind가 없을 경우 기본값으로 'basic' 설정
+        talentList: talentListResult?.[0]?.tal || '',
+        talentDetails: talentDetailsResult
       }
     });
   } catch (error) {

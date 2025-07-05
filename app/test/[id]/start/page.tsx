@@ -390,6 +390,42 @@ export default function TestStartPage({ params }: TestStartPageProps) {
         return;
       }
 
+      // 시작 안내 페이지에서 "시작하기" 버튼 클릭 시 처리
+      if (isThinkingStartPage || isPreferenceStartPage) {
+        console.log('시작 안내 페이지에서 실제 문제로 이동 요청');
+        
+        // 시작 안내 페이지에서는 답변 저장 없이 바로 다음 문제 가져오기
+        // 특별한 더미 답변을 보내서 다음 문제로 이동 처리
+        const response = await fetch(`/api/test/${testId}/save-answer`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...getLanguageHeaders()
+          },
+          body: JSON.stringify({
+            anp_seq: testData.anp_seq,
+            qu_code: testData.qu_code, // thk00000 또는 img00000
+            an_val: 0, // 더미 값 (시작 페이지용)
+            an_wei: 0, // 더미 값 (시작 페이지용)
+            step: testData.step,
+            isStartPage: true // 시작 페이지임을 표시
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error('다음 문제를 가져오는데 실패했습니다');
+        }
+
+        const data = await response.json();
+        console.log('시작 안내 페이지에서 다음 문제 응답:', data);
+        
+        // 🔥 API 호출 성공 후 페이지 새로고침으로 올바른 첫 번째 문제 표시
+        // 이렇게 하면 서버가 DB의 최신 상태(img11010)를 기준으로 페이지를 다시 렌더링
+        console.log('🔄 시작 페이지 처리 완료 - 페이지 새로고침하여 첫 번째 문제 표시');
+        window.location.reload();
+        return;
+      }
+
       // 일반적인 답변 저장 및 다음 문항 이동
       const selectedAnswersList = Object.entries(selectedAnswers);
       if (selectedAnswersList.length === 0) {
@@ -433,7 +469,8 @@ export default function TestStartPage({ params }: TestStartPageProps) {
             current_step: testData.step,
             next_step: data.nextQuestion?.step,
             completed_pages: data.completed_pages,
-            total_questions: data.total_questions
+            total_questions: data.total_questions,
+            cr_seq: data.cr_seq
           });
           
           // 단계 완료 시 저장된 데이터 정리
@@ -448,7 +485,9 @@ export default function TestStartPage({ params }: TestStartPageProps) {
             test_step: getTestStep(data.nextQuestion?.step || prev.step),
             // 진행률 정보도 업데이트
             completed_pages: data.completed_pages,
-            total_questions: data.total_questions
+            total_questions: data.total_questions,
+            // 전체 검사 완료 시 cr_seq 추가
+            cr_seq: data.cr_seq || prev.cr_seq
           }) : null);
           setIsSubmitting(false);
           return;
@@ -505,6 +544,14 @@ export default function TestStartPage({ params }: TestStartPageProps) {
 
   // 사고력 진단 유형인지 확인
   const isThinkingTest = testData?.step === 'thk';
+
+  // 시작 안내 페이지 확인 (thkIndex 파일명 또는 thk00000 코드)
+  const isThinkingStartPage = testData?.step === 'thk' && 
+    (testData?.qu_filename === 'thkIndex' || testData?.qu_code === 'thk00000');
+  
+  // 선호도 진단 시작 안내 페이지 확인 (imgIndex 파일명 또는 img00000 코드)
+  const isPreferenceStartPage = testData?.step === 'img' && 
+    (testData?.qu_filename === 'imgIndex' || testData?.qu_code === 'img00000');
 
   if (loading) {
     return (
@@ -635,6 +682,74 @@ export default function TestStartPage({ params }: TestStartPageProps) {
               currentStep={testData.prev_step || testData.step}
               cr_seq={testData.cr_seq}
             />
+          ) : isThinkingStartPage ? (
+            /* 사고력진단 시작 안내 페이지 */
+            <div className="text-center p-12 bg-white/90 backdrop-blur-md rounded-3xl shadow-2xl border border-white/30 hover:shadow-3xl transition-all duration-300">
+              <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-2xl mb-6 shadow-lg">
+                <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                </svg>
+              </div>
+              <h3 className="text-3xl font-bold text-gray-900 mb-4">사고력진단 시작</h3>
+              <p className="text-gray-600 text-lg mb-8 leading-relaxed">
+                이제 사고력진단을 시작하겠습니다.<br />
+                논리적 사고력, 창의적 사고력 등 다양한 사고력을 측정합니다.<br />
+                집중하여 문제를 해결해 주세요.
+              </p>
+              <button
+                onClick={handleNextQuestion}
+                disabled={isSubmitting}
+                className="px-8 py-4 bg-gradient-to-r from-purple-500 to-indigo-600 text-white font-bold rounded-xl hover:from-purple-600 hover:to-indigo-700 transition-all duration-200 shadow-lg hover:shadow-xl flex items-center justify-center mx-auto transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSubmitting ? (
+                  <>
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                    시작 중...
+                  </>
+                ) : (
+                  <>
+                    사고력진단 시작하기
+                    <svg className="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </>
+                )}
+              </button>
+            </div>
+          ) : isPreferenceStartPage ? (
+            /* 선호도진단 시작 안내 페이지 */
+            <div className="text-center p-12 bg-white/90 backdrop-blur-md rounded-3xl shadow-2xl border border-white/30 hover:shadow-3xl transition-all duration-300">
+              <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-pink-500 to-rose-600 rounded-2xl mb-6 shadow-lg">
+                <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                </svg>
+              </div>
+              <h3 className="text-3xl font-bold text-gray-900 mb-4">선호도진단 시작</h3>
+              <p className="text-gray-600 text-lg mb-8 leading-relaxed">
+                이제 선호도진단을 시작하겠습니다.<br />
+                다양한 이미지를 보고 선호하는 것을 선택해 주세요.<br />
+                직관적으로 선택하는 것이 좋습니다.
+              </p>
+              <button
+                onClick={handleNextQuestion}
+                disabled={isSubmitting}
+                className="px-8 py-4 bg-gradient-to-r from-pink-500 to-rose-600 text-white font-bold rounded-xl hover:from-pink-600 hover:to-rose-700 transition-all duration-200 shadow-lg hover:shadow-xl flex items-center justify-center mx-auto transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSubmitting ? (
+                  <>
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                    시작 중...
+                  </>
+                ) : (
+                  <>
+                    선호도진단 시작하기
+                    <svg className="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </>
+                )}
+              </button>
+            </div>
           ) : testData && testData.questions && testData.questions.length > 0 ? (
             <>
               <div className="space-y-8">
