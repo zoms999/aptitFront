@@ -282,13 +282,22 @@ export async function POST(
     // 3. 현재 단계 완료 여부 확인 및 다음 질문 추출
     console.log('[DEBUG] 다음 문제 조회 시작 - anp_seq:', anp_seq);
     
+    // 현재 단계 정보 확인
+    const currentStepInfo = await prisma.$queryRaw`
+      SELECT anp_seq, anp_step, qu_code 
+      FROM mwd_answer_progress 
+      WHERE anp_seq = ${anp_seq}::integer
+    `;
+    console.log('[DEBUG] 현재 단계 정보:', currentStepInfo);
+    
     const nextQuestionResult = await prisma.$queryRaw`
       WITH progress_list AS (
           SELECT  
               ap.anp_seq, 
               qu.qu_code, 
               qu.qu_filename,
-              ROW_NUMBER() OVER (ORDER BY qu.qu_filename ASC) AS progress,
+              qu.qu_order,
+              ROW_NUMBER() OVER (ORDER BY co.coc_order, qu.qu_kind2, qu_order) AS progress,
               qu.qu_kind1 AS step, 
               qu.qu_action, 
               COALESCE(qa.qua_type, '-') AS qua_type, 
@@ -304,11 +313,14 @@ export async function POST(
             AND qu.qu_kind1 = (SELECT anp_step FROM mwd_answer_progress WHERE anp_seq = ${anp_seq}::integer)
             AND qu.qu_filename NOT LIKE '%Index%'
             AND qu.qu_filename NOT LIKE '%index%'
+            AND qu.qu_qusyn = 'Y'
+            AND qu.qu_use = 'Y'
       ),
       plist AS (
           SELECT 
               pl.qu_code, 
               pl.qu_filename, 
+              pl.qu_order,
               pl.progress, 
               pl.step
           FROM mwd_answer_progress ap, progress_list pl
@@ -317,12 +329,16 @@ export async function POST(
       SELECT 
           nlist.qu_filename, 
           nlist.qu_code, 
+          nlist.qu_order,
           nlist.step, 
           plist.step AS prev_step,
           nlist.qu_action, 
           plist.qu_code AS prev_code, 
+          plist.qu_order AS prev_order,
           nlist.qua_type, 
-          nlist.pd_kind
+          nlist.pd_kind,
+          nlist.progress AS next_progress,
+          plist.progress AS current_progress
       FROM progress_list nlist, plist
       WHERE nlist.progress > plist.progress
       ORDER BY nlist.progress
@@ -336,7 +352,14 @@ export async function POST(
     
     if (Array.isArray(nextQuestionResult) && nextQuestionResult.length > 0) {
       nextQuestion = nextQuestionResult[0];
-      console.log('[DEBUG] 다음 문제 발견:', nextQuestion);
+      console.log('[DEBUG] 다음 문제 발견:', {
+        현재_문제: nextQuestion.prev_code,
+        현재_순서: nextQuestion.prev_order,
+        다음_문제: nextQuestion.qu_code,
+        다음_순서: nextQuestion.qu_order,
+        단계: nextQuestion.step,
+        진행상황: `${nextQuestion.current_progress} → ${nextQuestion.next_progress}`
+      });
     } else {
       // 현재 단계에서 다음 질문이 없는 경우, 단계 완료 확인
       console.log('현재 단계에서 다음 질문이 없음. 단계 완료 여부 확인 중...');

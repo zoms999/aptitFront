@@ -211,8 +211,11 @@ export async function calculateThinkingResults(anp_seq: number) {
 }
 
 // 선호도 진단 결과 계산
+// 선호도 진단 결과 계산 (mwd_score1 점수만 계산)
+// - 역할: img 단계 완료 시 mwd_score1 테이블에 점수 저장
+// - 직업 추천(mwd_resjob)은 calculateFinalResults에서 통합 처리
 export async function calculatePreferenceResults(anp_seq: number) {
-  console.log('📊 [선호도진단 결과] 계산 시작 - anp_seq:', anp_seq);
+  console.log('📊 [선호도진단 결과] 점수 계산 시작 - anp_seq:', anp_seq);
   
   try {
     await prisma.$transaction(async (tx) => {
@@ -259,35 +262,12 @@ export async function calculatePreferenceResults(anp_seq: number) {
           COALESCE(qa.qua_code, qu.qu_kind3), COALESCE(qa.qua_totalscore, 1)
       `;
       
-      // 3. 선호도 기반 직업 추천
-      await tx.$queryRaw`
-        DELETE FROM mwd_resjob WHERE anp_seq = ${anp_seq}::integer AND rej_kind = 'img'
-      `;
-      
-      await tx.$queryRaw`
-        INSERT INTO mwd_resjob (anp_seq, rej_code, rej_kind, rej_rank)
-        SELECT 
-          ${anp_seq}::integer,
-          jo_code,
-          'img' as rej_kind,
-          row_number() OVER (ORDER BY score DESC) as rej_rank
-        FROM (
-          SELECT 
-            ijm.jo_code,
-            sum(sc1.sc1_score) as score
-          FROM mwd_score1 sc1
-          JOIN mwd_image_job_map ijm ON ijm.qu_code = (
-            SELECT qu_code FROM mwd_question WHERE qu_kind3 = sc1.qua_code AND qu_kind1 = 'img' LIMIT 1
-          )
-          WHERE sc1.anp_seq = ${anp_seq}::integer AND sc1.sc1_step = 'img'
-          GROUP BY ijm.jo_code
-          ORDER BY score DESC
-          LIMIT 20
-        ) t
-      `;
+      // [수정] mwd_resjob 직업 추천 로직 제거 
+      // - calculateFinalResults에서 통합 처리하므로 중복 제거
+      // - 이 함수는 mwd_score1 점수 계산만 담당
     });
     
-    console.log('✅ [선호도진단 결과] 계산 완료');
+    console.log('✅ [선호도진단 결과] 점수 계산 완료');
     
   } catch (error) {
     console.error('❌ [선호도진단 결과] 계산 중 오류:', error);
@@ -343,48 +323,19 @@ export async function calculateTalentResults(anp_seq: number) {
 }
 
 // 최종 종합 결과 계산 (모든 검사 완료 후 단 한번 호출)
+// - 역할: 모든 단계(tnd, thk, img, tal)의 점수를 종합하여 최종 mwd_resjob, mwd_resduty 생성
+// - 기존 각 단계별 함수에서 계산된 mwd_score1 데이터를 활용
 export async function calculateFinalResults(anp_seq: number) {
   console.log('📊 [최종 결과] 계산 시작 - anp_seq:', anp_seq);
   try {
     await prisma.$transaction(async (tx) => {
-      // 1. 선호도(img) 점수 계산 (OLD 시스템 방식)
-      console.log('🔄 [1단계] 선호도 점수 계산 시작');
+      // [수정] 선호도 점수 계산 제거
+      // - calculatePreferenceResults에서 이미 계산되었으므로 중복 제거
+      // - 기존에 계산된 mwd_score1의 img 데이터를 그대로 사용
+      console.log('🔄 [1단계] 선호도 점수 확인 (이미 계산됨)');
       
-      // 기존 선호도 점수 삭제
-      await tx.$queryRaw`
-        DELETE FROM mwd_score1 WHERE anp_seq = ${anp_seq}::integer AND sc1_step = 'img'
-      `;
-      
-      // 새로운 선호도 점수 계산 및 삽입
-      await tx.$queryRaw`
-        INSERT INTO mwd_score1 (anp_seq, sc1_step, qua_code, sc1_score, sc1_rate, sc1_rank, sc1_resrate, sc1_qcnt)
-        SELECT ${anp_seq}::integer, 'img', qua_code, score, rate, 
-               row_number() OVER (ORDER BY rate DESC, tots DESC), 
-               round(cast(cnt as numeric)/cast(tcnt as numeric),3) as resrate, tcnt
-        FROM (
-          SELECT
-            qa.qua_code,
-            sum(an.an_wei) as score,
-            CASE
-              WHEN qa.qua_code = 'img21000' THEN round(cast(sum(an.an_wei) as numeric)/cast(qa.qua_totalscore as numeric),3) * 1.4
-              ELSE round(cast(sum(an.an_wei) as numeric)/cast(qa.qua_totalscore as numeric),3)
-            END as rate,
-            qa.qua_totalscore as tots,
-            count(*) as tcnt,
-            sum(CASE WHEN an.an_wei > 0 THEN 1 ELSE 0 END) as cnt
-          FROM mwd_answer an, mwd_question qu, mwd_question_attr qa
-          WHERE an.anp_seq = ${anp_seq}::integer
-            AND qu.qu_code = an.qu_code AND qu.qu_qusyn = 'Y' AND qu.qu_use = 'Y' AND an.an_ex > 0
-            AND qu.qu_kind1 = 'img' AND qa.qua_code = qu.qu_kind3
-          GROUP BY qa.qua_code, qa.qua_totalscore
-          ORDER BY qa.qua_code
-        ) as t2
-      `;
-      
-      console.log('✅ [1단계] 선호도 점수 계산 완료');
-      
-      // 2. 결과 요약 테이블 초기화 및 생성
-      console.log('🔄 [2단계] 결과 요약 테이블 생성 시작');
+              // 2. 결과 요약 테이블 초기화 및 생성 (기존 점수 데이터 활용)
+        console.log('🔄 [2단계] 결과 요약 테이블 생성 시작');
       
       // 기존 요약 정보 전체 삭제
       await tx.$queryRaw`
