@@ -5,8 +5,7 @@ import { authOptions } from '../../../../../lib/auth';
 import { 
   calculatePersonalityResults, 
   calculateThinkingResults, 
-  calculatePreferenceResults, 
-  calculateTalentResults,
+  calculatePreferenceResults,
   calculateFinalResults 
 } from '../../../../../lib/test/services/results';
 
@@ -256,7 +255,7 @@ export async function POST(
           } else if (currentStep === 'img') {
             await calculatePreferenceResults(anp_seq);
             
-            // 최종 결과 계산
+            // 최종 결과 계산 (재능 점수 포함)
             try {
               await calculateFinalResults(anp_seq);
               console.log('✅ [최종 결과] 계산 완료');
@@ -368,8 +367,6 @@ export async function POST(
           await calculatePersonalityResults(anp_seq);
         } else if (step === 'thk') {
           await calculateThinkingResults(anp_seq);
-        } else if (step === 'tal') {
-          await calculateTalentResults(anp_seq);
         } else if (step === 'img') {
           await calculatePreferenceResults(anp_seq);
         }

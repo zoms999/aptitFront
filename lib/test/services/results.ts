@@ -288,31 +288,38 @@ export async function calculateTalentResults(anp_seq: number) {
       `;
       // 2. 재능진단 점수 계산 및 저장 (tnd와 유사하게 가정)
       await tx.$queryRaw`
-        INSERT INTO mwd_score1 
+       INSERT INTO mwd_score1 
         (anp_seq, sc1_step, qua_code, sc1_score, sc1_rate, sc1_rank, sc1_qcnt) 
         SELECT 
-          ${anp_seq}::integer AS anpseq, 
-          'tal' AS tal, 
-          qa.qua_code, 
-          sum(an.an_wei) AS score, 
-          round(cast(sum(an.an_wei) AS numeric)/cast(qa.qua_totalscore AS numeric),3) AS rate, 
-          row_number() OVER (ORDER BY round(cast(sum(an.an_wei) AS numeric)/cast(qa.qua_totalscore AS numeric),3) DESC),
-          count(*) as cnt
-        FROM 
-          mwd_answer an, 
-          mwd_question qu, 
-          mwd_question_attr qa 
-        WHERE 
-          an.anp_seq = ${anp_seq}::integer 
-          AND qu.qu_code = an.qu_code 
-          AND qu.qu_qusyn = 'Y' 
-          AND qu.qu_use = 'Y' 
-          AND qu.qu_kind1 = 'tal' -- 재능 문항 필터링
-          AND qa.qua_code = qu.qu_kind2 
-          AND an.an_ex > 0 
-          AND an.an_progress > 0 
-        GROUP BY 
-          qa.qua_code, qa.qua_totalscore
+          ${anp_seq}::integer AS anp_seq, 
+          'tal' AS sc1_step, 
+          qua_code, 
+          score, 
+          rate, 
+          -- 동점자 처리를 위해 2차 정렬 기준(총점) 추가
+          row_number() OVER (ORDER BY rate DESC, score DESC) as sc1_rank,
+          cnt as sc1_qcnt
+        FROM (
+          SELECT 
+            qa.qua_code, 
+            sum(an.an_wei) AS score, 
+            round(cast(sum(an.an_wei) AS numeric) / cast(qa.qua_totalscore AS numeric), 3) AS rate,
+            count(*) as cnt
+          FROM 
+            mwd_answer an
+            JOIN mwd_question qu ON qu.qu_code = an.qu_code 
+            -- 올바른 JOIN 조건 확인 필요 (현재는 qu_kind2로 가정)
+            JOIN mwd_question_attr qa ON qa.qua_code = qu.qu_kind2 
+          WHERE 
+            an.anp_seq = ${anp_seq}::integer 
+            AND qu.qu_qusyn = 'Y' 
+            AND qu.qu_use = 'Y' 
+            AND qu.qu_kind1 = 'tal' -- 재능 문항 필터링
+            AND an.an_ex > 0 
+            AND an.an_progress > 0 
+          GROUP BY 
+            qa.qua_code, qa.qua_totalscore
+        ) AS t1
       `;
     });
     console.log('✅ [재능진단 결과] 계산 완료');
@@ -329,13 +336,62 @@ export async function calculateFinalResults(anp_seq: number) {
   console.log('📊 [최종 결과] 계산 시작 - anp_seq:', anp_seq);
   try {
     await prisma.$transaction(async (tx) => {
-      // [수정] 선호도 점수 계산 제거
-      // - calculatePreferenceResults에서 이미 계산되었으므로 중복 제거
-      // - 기존에 계산된 mwd_score1의 img 데이터를 그대로 사용
-      console.log('🔄 [1단계] 선호도 점수 확인 (이미 계산됨)');
       
-              // 2. 결과 요약 테이블 초기화 및 생성 (기존 점수 데이터 활용)
-        console.log('🔄 [2단계] 결과 요약 테이블 생성 시작');
+      // ====================================================================
+      // 1. 재능(tal) 점수 계산 및 저장 (새로 추가된 로직)
+      // ====================================================================
+      console.log('🔄 [1단계] 재능(tal) 점수 계산 시작');
+      
+      // 기존 재능 점수 데이터 삭제
+      await tx.$queryRaw`
+        DELETE FROM mwd_score1 
+        WHERE anp_seq = ${anp_seq}::integer 
+        AND sc1_step = 'tal'
+      `;
+      
+      // 재능 점수 계산 및 삽입
+      await tx.$queryRaw`
+      INSERT INTO mwd_score1
+      (anp_seq, sc1_step, qua_code, sc1_score, sc1_rate, sc1_rank, sc1_qcnt)
+        SELECT
+          ${anp_seq}::integer AS anp_seq,
+          'tal' AS sc1_step,
+          qua_code,
+          score,
+          rate,
+          row_number() OVER (ORDER BY rate DESC, score DESC) as sc1_rank,
+          cnt as sc1_qcnt
+        FROM (
+          SELECT
+            qa.qua_code,
+            sum(an.an_wei) AS score,
+            round(cast(sum(an.an_wei) AS numeric) / cast(qa.qua_totalscore AS numeric), 3) AS rate,
+            count(*) as cnt
+          FROM
+            mwd_answer an
+            JOIN mwd_question qu ON qu.qu_code = an.qu_code
+            -- [수정 1] 재능 속성 코드는 'qu_kind3' 컬럼에 있습니다.
+            JOIN mwd_question_attr qa ON qa.qua_code = qu.qu_kind3
+          WHERE
+            an.anp_seq = ${anp_seq}::integer
+            -- [수정 2] 재능 문항은 'thk' 진단에 포함되어 있습니다.
+            AND qu.qu_kind1 = 'thk'
+            -- [추가] qu_kind3에 값이 있는 문항만 필터링합니다.
+            AND qu.qu_kind3 IS NOT NULL AND qu.qu_kind3 != ''
+            AND qu.qu_qusyn = 'Y'
+            AND qu.qu_use = 'Y'
+            AND an.an_ex > 0
+            AND an.an_progress > 0
+          GROUP BY
+            qa.qua_code, qa.qua_totalscore
+        ) AS t1
+      `;
+      console.log('✅ [1단계] 재능(tal) 점수 계산 완료');
+
+      // ====================================================================
+      // 2. 결과 요약 테이블 초기화 및 생성 (기존 점수 데이터 활용)
+      // ====================================================================
+      console.log('🔄 [2단계] 결과 요약 테이블 생성 시작');
       
       // 기존 요약 정보 전체 삭제
       await tx.$queryRaw`
@@ -384,7 +440,7 @@ export async function calculateFinalResults(anp_seq: number) {
         WHERE anp_seq = ${anp_seq}::integer
       `;
       
-      // 3) 상위 재능(tal) 코드 업데이트
+      // 3) 상위 재능(tal) 코드 업데이트 (이제 정상 동작)
       await tx.$queryRaw`
         UPDATE mwd_resval
         SET rv_tal1 = t.tal1, rv_tal2 = t.tal2, rv_tal3 = t.tal3, rv_tal4 = t.tal4, rv_tal5 = t.tal5, rv_tal6 = t.tal6, rv_tal7 = t.tal7
@@ -400,8 +456,8 @@ export async function calculateFinalResults(anp_seq: number) {
           FROM (
             SELECT qua_code, row_number() OVER(ORDER BY sc1_rank) as rk
             FROM mwd_score1
-            WHERE anp_seq = ${anp_seq}::integer AND sc1_step = 'tal' AND sc1_rank <= 5
-            LIMIT 5
+            WHERE anp_seq = ${anp_seq}::integer AND sc1_step = 'tal' AND sc1_rank <= 7
+            LIMIT 7
           ) tal
         ) t
         WHERE anp_seq = ${anp_seq}::integer
@@ -428,7 +484,9 @@ export async function calculateFinalResults(anp_seq: number) {
       
       console.log('✅ [2단계] 결과 요약 테이블 생성 완료');
       
+      // ====================================================================
       // 3. 추천 직업 및 직무 생성
+      // ====================================================================
       console.log('🔄 [3단계] 추천 직업 및 직무 생성 시작');
       
       // 기존 추천 직업 정보 전체 삭제
